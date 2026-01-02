@@ -62,7 +62,7 @@ VITE_SUPABASE_ANON_KEY=<your-supabase-anon-key>
 npm run dev
 ```
 
-The application will be available at `http://localhost:8080`
+The application will be available at `http://localhost:4145`
 
 ### Building for Production
 

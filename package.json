@@ -5,7 +5,7 @@
   "private": true,
   "description": "FrostGuard LoRaWAN Device Emulator - Web-based simulator for LoRaWAN sensors integrated with Supabase backend",
   "scripts": {
-    "dev": "vite --port 8080",
+    "dev": "vite",
     "build": "tsc && vite build",
     "build:dev": "tsc && vite build --mode development --sourcemap",
     "preview": "vite preview",

@@ -63,7 +63,7 @@ supabase/
 ```bash
 npm run dev
 ```
-Visit `http://localhost:8080` - you should see the landing page with three feature cards and a "Launch Emulator" button.
+Visit `http://localhost:4145` - you should see the landing page with three feature cards and a "Launch Emulator" button.
 
 ### 3. Database Schema Design (P0 - Critical)
 **What:** Design and implement the PostgreSQL schema

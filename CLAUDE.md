@@ -66,7 +66,7 @@ This file provides context for Claude Code (or other AI assistants) working on t
 
 npm install              # Install dependencies
 
-npm run dev              # Start dev server (port 8080)
+npm run dev              # Start dev server (port 4145)
 
  
 
