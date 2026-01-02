@@ -1,8 +1,9 @@
 /**
  * Database type definitions
- * Auto-generated from Supabase schema
+ * Generated from Supabase schema
  *
- * To regenerate: run `supabase gen types typescript --local > src/integrations/supabase/types.ts`
+ * To regenerate after schema changes:
+ * supabase gen types typescript --local > src/integrations/supabase/types.ts
  */
 
 export type Json =
@@ -13,41 +14,275 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
+export type DeviceType = 'temperature' | 'humidity' | 'door'
+export type SensorStatus = 'active' | 'inactive' | 'error'
+export type UserRole = 'admin' | 'manager' | 'viewer'
+
 export interface Database {
   public: {
     Tables: {
-      // TODO: Define database schema tables (P0 - Critical)
-      // Required tables based on CLAUDE.md architecture:
-      // - organizations: Multi-tenant hierarchy with RLS
-      // - users: Authentication and user profiles
-      // - ttn_settings: TTN configuration (org-level with RLS)
-      // - synced_users: User-level TTN settings
-      // - devices: Virtual LoRaWAN sensors
-      // - telemetry: Time-series sensor data
-      // - sites: FrostGuard site entities
-      // - units: Refrigeration units
-      // - sensors: Physical sensor mappings
-      // After creating migrations, regenerate types with:
-      // supabase gen types typescript --local > src/integrations/supabase/types.ts
-      // Reference: NEXT_STEPS.md section 3, CLAUDE.md "Multi-Tenant Design"
+      organizations: {
+        Row: {
+          id: string
+          name: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      profiles: {
+        Row: {
+          id: string
+          organization_id: string
+          full_name: string | null
+          role: UserRole
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id: string
+          organization_id: string
+          full_name?: string | null
+          role?: UserRole
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          full_name?: string | null
+          role?: UserRole
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      ttn_settings: {
+        Row: {
+          id: string
+          organization_id: string
+          app_id: string
+          api_key: string
+          webhook_url: string | null
+          region: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          app_id: string
+          api_key: string
+          webhook_url?: string | null
+          region?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          app_id?: string
+          api_key?: string
+          webhook_url?: string | null
+          region?: string
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      devices: {
+        Row: {
+          id: string
+          organization_id: string
+          dev_eui: string
+          name: string
+          device_type: DeviceType
+          status: SensorStatus
+          simulation_params: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          dev_eui: string
+          name: string
+          device_type: DeviceType
+          status?: SensorStatus
+          simulation_params?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          dev_eui?: string
+          name?: string
+          device_type?: DeviceType
+          status?: SensorStatus
+          simulation_params?: Json
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      telemetry: {
+        Row: {
+          id: string
+          device_id: string
+          timestamp: string
+          payload: Json
+          rssi: number | null
+          snr: number | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          device_id: string
+          timestamp?: string
+          payload: Json
+          rssi?: number | null
+          snr?: number | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          device_id?: string
+          timestamp?: string
+          payload?: Json
+          rssi?: number | null
+          snr?: number | null
+          created_at?: string
+        }
+      }
+      sites: {
+        Row: {
+          id: string
+          organization_id: string
+          name: string
+          address: string | null
+          frostguard_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          name: string
+          address?: string | null
+          frostguard_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          name?: string
+          address?: string | null
+          frostguard_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      units: {
+        Row: {
+          id: string
+          site_id: string
+          name: string
+          unit_type: string | null
+          frostguard_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          site_id: string
+          name: string
+          unit_type?: string | null
+          frostguard_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          site_id?: string
+          name?: string
+          unit_type?: string | null
+          frostguard_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      sensors: {
+        Row: {
+          id: string
+          unit_id: string
+          device_id: string | null
+          name: string
+          sensor_type: string | null
+          frostguard_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          unit_id: string
+          device_id?: string | null
+          name: string
+          sensor_type?: string | null
+          frostguard_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          unit_id?: string
+          device_id?: string | null
+          name?: string
+          sensor_type?: string | null
+          frostguard_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
     Views: {
-      // TODO: Add database views as needed (P2)
-      // Potential views:
-      // - active_devices_with_latest_telemetry
-      // - organization_device_summary
+      // Views can be added here as needed
     }
     Functions: {
-      // TODO: Define RPC function signatures (P1)
-      // Functions will be created as Supabase edge functions
-      // Reference: supabase/functions/README.md
+      // Edge function type signatures can be defined here
     }
     Enums: {
-      // TODO: Add enum types (P1)
-      // Potential enums:
-      // - device_type: 'temperature' | 'humidity' | 'door'
-      // - sensor_status: 'active' | 'inactive' | 'error'
-      // - telemetry_type: 'uplink' | 'downlink'
+      device_type: DeviceType
+      sensor_status: SensorStatus
+      user_role: UserRole
     }
   }
 }
+
+// Helper types for easier use
+export type Organization = Database['public']['Tables']['organizations']['Row']
+export type Profile = Database['public']['Tables']['profiles']['Row']
+export type TTNSettings = Database['public']['Tables']['ttn_settings']['Row']
+export type Device = Database['public']['Tables']['devices']['Row']
+export type Telemetry = Database['public']['Tables']['telemetry']['Row']
+export type Site = Database['public']['Tables']['sites']['Row']
+export type Unit = Database['public']['Tables']['units']['Row']
+export type Sensor = Database['public']['Tables']['sensors']['Row']
+
+// Insert types
+export type DeviceInsert = Database['public']['Tables']['devices']['Insert']
+export type TelemetryInsert = Database['public']['Tables']['telemetry']['Insert']
+export type TTNSettingsInsert = Database['public']['Tables']['ttn_settings']['Insert']
+
+// Update types
+export type DeviceUpdate = Database['public']['Tables']['devices']['Update']
+export type TTNSettingsUpdate = Database['public']['Tables']['ttn_settings']['Update']

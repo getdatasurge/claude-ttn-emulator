@@ -1,0 +1,14 @@
+{
+  "session_id": "frostguard-lorawan-emulator-initial",
+  "created_at": "2026-01-02T22:40:00Z",
+  "last_updated": "2026-01-02T22:40:00Z",
+  "status": "planning",
+  "current_phase": 1,
+  "current_task": "1.1",
+  "completed_tasks": [],
+  "checkpoints": [],
+  "total_tasks": 9,
+  "completed_count": 0,
+  "progress_percentage": 0,
+  "next_action": "Install shadcn-ui components"
+}

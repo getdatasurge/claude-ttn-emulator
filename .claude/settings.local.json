@@ -14,7 +14,12 @@
       "Bash(gh auth status:*)",
       "Bash(gh repo create:*)",
       "Bash(git push:*)",
-      "Bash(npm run lint:*)"
+      "Bash(npm run lint:*)",
+      "Bash(gh issue create:*)",
+      "Bash(gh label create:*)",
+      "Bash(gh issue list:*)",
+      "Bash(npx shadcn-ui@latest add:*)",
+      "Bash(npx shadcn@latest add:*)"
     ]
   }
 }
