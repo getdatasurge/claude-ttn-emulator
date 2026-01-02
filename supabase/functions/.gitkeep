@@ -1,0 +1,86 @@
+# Supabase Edge Functions
+
+TODO: Implement 17 Deno-based edge functions (P1 - Backend Logic)
+
+## Priority Order from NEXT_STEPS.md:
+
+### Phase 1: TTN Integration (P0)
+
+#### 1. ttn-simulate/
+Send simulated uplinks to TTN
+- Accept device telemetry data
+- Format LoRaWAN payload
+- POST to TTN v3 HTTP API
+- Return simulation status
+Reference: NEXT_STEPS.md section 6
+
+#### 2. ttn-preflight/
+Validate TTN config before simulation
+- Test API credentials
+- Verify endpoint accessibility
+- Check device registration
+- Return validation result
+
+#### 3. ttn-webhook/
+Receive webhook callbacks from TTN
+- Parse TTN webhook payload
+- Validate signature
+- Store telemetry in database
+- Trigger real-time updates
+IMPORTANT: Set verify_jwt = false in config
+
+#### 4. manage-ttn-settings/
+Test TTN API connection
+- Verify credentials
+- List available applications
+- Test device access
+- Return connection status
+
+### Phase 2: FrostGuard Integration (P1)
+
+#### 5. fetch-org-state/
+Pull data from FrostGuard
+- Fetch canonical organization data
+- Sync sites, units, sensors
+- Handle pagination
+- Cache results
+
+#### 6. sync-to-frostguard/
+Push data to FrostGuard
+- Send updates to FrostGuard API
+- Handle conflicts
+- Retry on failure
+- Log sync status
+
+### Phase 3: Additional Functions (P2)
+
+#### 7-17. Additional edge functions TBD
+Based on development needs:
+- Device CRUD operations
+- Telemetry aggregation
+- User management
+- Organization management
+- Alert handling
+- Report generation
+- Webhook management
+- Configuration management
+- Audit logging
+- Health checks
+- Scheduled jobs
+
+## Common Patterns
+
+All edge functions should:
+- Include CORS headers
+- Use service role key for elevated access
+- Propagate request ID for debugging
+- Implement proper error handling
+- Use consistent response envelopes
+- Add logging with debugLogger pattern
+
+Configuration:
+- verify_jwt = false (handled manually)
+- Set appropriate timeouts
+- Configure environment variables
+
+Reference: CLAUDE.md "Edge Functions" section, supabase/functions/README.md

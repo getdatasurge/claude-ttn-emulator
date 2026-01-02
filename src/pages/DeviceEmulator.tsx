@@ -23,6 +23,16 @@ export default function DeviceEmulator() {
         </div>
 
         {/* Main Content Area */}
+        {/* TODO: Replace placeholder with LoRaWANEmulator component
+         * Priority: P1 (Core Feature)
+         * Implementation plan:
+         * 1. Create LoRaWANEmulator orchestrator component (src/components/emulator/LoRaWANEmulator.tsx)
+         * 2. Implement DeviceManager panel for device CRUD operations
+         * 3. Add WebhookSettings panel for TTN configuration
+         * 4. Integrate Recharts for real-time telemetry visualization
+         * 5. Add React Query hooks for data fetching and mutations
+         * Reference: CLAUDE.md lines 37-42, NEXT_STEPS.md section 5
+         */}
         <div className="bg-card border rounded-lg p-6">
           <div className="text-center py-12">
             <p className="text-muted-foreground">

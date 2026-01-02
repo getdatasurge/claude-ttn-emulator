@@ -1,0 +1,44 @@
+# Emulator Components Directory
+
+TODO: Create emulator-specific components (P1 - Core Features)
+
+## Priority Components to Implement:
+
+### 1. LoRaWANEmulator.tsx (P1)
+Main orchestrator component (~1600+ LOC based on CLAUDE.md)
+- Device management panel
+- Telemetry simulation controls
+- TTN configuration interface
+- Real-time data visualization
+- WebSocket integration for live updates
+
+### 2. DeviceManager.tsx (P1)
+Device management interface (~1290 LOC based on CLAUDE.md)
+- Add/edit/delete virtual devices
+- Configure sensor types (temperature, humidity, door)
+- Set simulation parameters
+- Device status monitoring
+- Bulk operations
+
+### 3. WebhookSettings.tsx (P1)
+TTN configuration UI (~1700 LOC based on CLAUDE.md)
+- TTN API credentials management
+- Webhook endpoint configuration
+- Connection testing
+- Configuration validation
+- Import/export settings
+
+### 4. TelemetryChart.tsx (P2)
+Real-time data visualization
+- Recharts integration
+- Multiple sensor types support
+- Time-range selection
+- Export chart data
+
+### 5. UserSelectionGate.tsx (P1)
+Multi-tenant user context selection
+- Organization picker
+- Session storage for context (1-hour expiry)
+- User authentication state
+
+Reference: CLAUDE.md "Key Files & Entry Points" section

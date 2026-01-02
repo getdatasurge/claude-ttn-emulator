@@ -1,0 +1,71 @@
+# Custom React Hooks Directory
+
+TODO: Implement custom hooks for cross-cutting concerns (P2 - Code Quality)
+
+## Recommended Hooks from NEXT_STEPS.md:
+
+### Data Management Hooks
+
+#### useDevices() (P1)
+- Manage device state (CRUD operations)
+- React Query integration for server state
+- Optimistic updates
+- Error handling
+```typescript
+// Usage example:
+const { devices, createDevice, updateDevice, deleteDevice, isLoading } = useDevices()
+```
+
+#### useTelemetry(deviceId: string) (P1)
+- Handle telemetry data for a specific device
+- Real-time updates via Supabase Realtime
+- Historical data fetching
+- Data aggregation
+```typescript
+// Usage example:
+const { telemetry, latestReading, sendSimulatedUplink } = useTelemetry(deviceId)
+```
+
+#### useTTNConfig() (P1)
+- Manage TTN configuration state
+- Session storage synchronization
+- Conflict resolution
+- Validation
+```typescript
+// Usage example:
+const { config, updateConfig, validateConfig, isDirty } = useTTNConfig()
+```
+
+### Real-time Hooks
+
+#### useRealtimeSubscription(table: string, filter?: object) (P1)
+- Generic Supabase realtime subscription hook
+- Auto-cleanup on unmount
+- Error handling and reconnection
+- Type-safe with Database types
+```typescript
+// Usage example:
+const { data, status, error } = useRealtimeSubscription('telemetry', { device_id: 'abc123' })
+```
+
+### Integration Hooks
+
+#### useFrostGuardSync() (P2)
+- Trigger FrostGuard synchronization
+- Monitor sync status
+- Handle sync conflicts
+```typescript
+// Usage example:
+const { sync, syncStatus, lastSyncTime, isSyncing } = useFrostGuardSync()
+```
+
+#### useTTNWebhook() (P2)
+- Listen for TTN webhook events
+- Parse and validate webhook payloads
+- Update local state from webhooks
+```typescript
+// Usage example:
+const { webhookEvents, latestEvent } = useTTNWebhook()
+```
+
+Reference: NEXT_STEPS.md section 10, CLAUDE.md "React Patterns"
