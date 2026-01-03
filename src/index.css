@@ -1,59 +1,220 @@
+/* FrostGuard Industrial Monitoring Theme */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    /* LoRaWAN Emulator Dark Theme - Clean & Modern */
+    --background: 220 20% 7%;          /* Deep dark #0D1117 */
+    --foreground: 210 20% 95%;         /* Clean white */
+
+    --card: 220 18% 10%;               /* Card background #141921 */
+    --card-foreground: 210 20% 95%;
+
+    --popover: 220 20% 9%;
+    --popover-foreground: 210 20% 95%;
+
+    --primary: 152 76% 48%;            /* Green #22C55E - active/success */
+    --primary-foreground: 220 20% 7%;
+
+    --secondary: 220 15% 15%;          /* Muted dark */
+    --secondary-foreground: 210 20% 90%;
+
+    --muted: 220 15% 13%;
+    --muted-foreground: 220 10% 55%;
+
+    --accent: 152 76% 48%;             /* Green accent */
+    --accent-foreground: 220 20% 7%;
+
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 210 20% 95%;
+
+    --border: 220 15% 18%;
+    --input: 220 15% 14%;
+    --ring: 152 76% 48%;
+
+    --success: 152 76% 48%;            /* Green for success states */
+    --warning: 38 92% 50%;             /* Amber for warnings */
+    --signal: 152 76% 48%;             /* Green for signals/connectivity */
+    --info: 199 89% 48%;               /* Blue for info */
+
     --radius: 0.5rem;
+
+    /* Custom accent colors */
+    --green-glow: 152 76% 48%;
+    --amber-glow: 38 92% 50%;
+    --slate-deep: 220 20% 7%;
+    --slate-mid: 220 18% 12%;
+    --chart-line: 152 76% 48%;
   }
 
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+  /* Hex grid background pattern */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image:
+      radial-gradient(circle at 25% 25%, hsla(190, 100%, 50%, 0.03) 0%, transparent 50%),
+      radial-gradient(circle at 75% 75%, hsla(28, 100%, 50%, 0.02) 0%, transparent 50%);
+    background-size: 100% 100%;
+    pointer-events: none;
+    z-index: 0;
   }
-}
 
-@layer base {
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
+    font-family: 'Manrope', system-ui, sans-serif;
+    font-feature-settings: 'cv11' 1; /* Better number styling */
+  }
+
+  /* Technical/monospace elements */
+  code, pre, .font-mono,
+  [data-type="technical"] {
+    font-family: 'IBM Plex Mono', 'Courier New', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Headings with distinct weight */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Manrope', system-ui, sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer components {
+  /* Animated signal pulse */
+  @keyframes signal-pulse {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.6;
+      transform: scale(0.95);
+    }
+  }
+
+  @keyframes fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: -200% center;
+    }
+    100% {
+      background-position: 200% center;
+    }
+  }
+
+  /* Green glow effect for active elements */
+  .glow-green {
+    box-shadow:
+      0 0 10px hsla(var(--green-glow), 0.3),
+      0 0 20px hsla(var(--green-glow), 0.15),
+      inset 0 0 20px hsla(var(--green-glow), 0.05);
+  }
+
+  .glow-amber {
+    box-shadow:
+      0 0 10px hsla(var(--amber-glow), 0.3),
+      0 0 20px hsla(var(--amber-glow), 0.15);
+  }
+
+  /* Dashboard card styles */
+  .dashboard-card {
+    @apply bg-card border border-border rounded-lg;
+    background: linear-gradient(180deg, hsl(220 18% 11%) 0%, hsl(220 18% 9%) 100%);
+  }
+
+  .dashboard-section-title {
+    @apply text-sm font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-2;
+  }
+
+  .dashboard-section-title::before {
+    content: '';
+    @apply w-2 h-2 rounded-full bg-primary;
+  }
+
+  /* Stat card for metrics */
+  .stat-value {
+    @apply text-2xl font-bold text-foreground tabular-nums;
+  }
+
+  .stat-label {
+    @apply text-xs text-muted-foreground uppercase tracking-wide;
+  }
+
+  /* Status badge */
+  .status-badge {
+    @apply px-2 py-0.5 rounded text-xs font-medium uppercase tracking-wide;
+  }
+
+  .status-badge-active {
+    @apply bg-primary/20 text-primary;
+  }
+
+  .status-badge-inactive {
+    @apply bg-muted text-muted-foreground;
+  }
+
+  .status-badge-warning {
+    @apply bg-warning/20 text-warning;
+  }
+
+  /* Chart container */
+  .chart-container {
+    @apply relative h-32 w-full;
+  }
+
+  /* Staggered animation utilities */
+  .animate-fade-in-up {
+    animation: fade-in-up 0.5s ease-out forwards;
+  }
+
+  .animate-delay-100 { animation-delay: 100ms; }
+  .animate-delay-200 { animation-delay: 200ms; }
+  .animate-delay-300 { animation-delay: 300ms; }
+  .animate-delay-400 { animation-delay: 400ms; }
+  .animate-delay-500 { animation-delay: 500ms; }
+
+  /* Status indicators */
+  .status-active {
+    @apply relative;
+  }
+
+  .status-active::before {
+    content: '';
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: hsl(var(--signal));
+    border-radius: 50%;
+    animation: signal-pulse 2s ease-in-out infinite;
+  }
+
+  /* Hexagonal pattern overlay */
+  .hex-pattern {
+    background-image:
+      repeating-linear-gradient(90deg, transparent, transparent 50px, hsla(var(--border), 0.3) 50px, hsla(var(--border), 0.3) 51px),
+      repeating-linear-gradient(0deg, transparent, transparent 50px, hsla(var(--border), 0.3) 50px, hsla(var(--border), 0.3) 51px);
   }
 }

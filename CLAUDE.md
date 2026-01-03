@@ -10,7 +10,7 @@ This file provides context for Claude Code (or other AI assistants) working on t
 
  
 
-**FrostGuard LoRaWAN Device Emulator** is a full-stack development and testing tool for The Things Network (TTN) integration. It's a web-based simulator for LoRaWAN sensors integrated with Supabase backend, designed to test multi-tenant IoT data flow between FrostGuard (upstream project) and this emulator.
+**FrostGuard LoRaWAN Device Emulator** is a full-stack development and testing tool for The Things Network (TTN) integration. It's a web-based simulator for LoRaWAN sensors with Turso edge database and Cloudflare Workers backend, designed to test multi-tenant IoT data flow between FrostGuard (upstream project) and this emulator.
 
  
 
@@ -46,13 +46,15 @@ This file provides context for Claude Code (or other AI assistants) working on t
 
 ### Backend
 
-- **Database:** Supabase (PostgreSQL) with Row-Level Security (RLS)
+- **Database:** Turso (SQLite at the edge)
 
-- **Edge Functions:** Deno-based serverless functions (17 functions in `supabase/functions/`)
+- **API:** Cloudflare Workers (serverless TypeScript API)
+
+- **Authentication:** Stack Auth with webhook-based user mirroring from FrostGuard
 
 - **API Integration:** The Things Network (TTN) v3 HTTP API
 
-- **Cross-project sync:** FrostGuard synchronization
+- **Cross-project sync:** FrostGuard webhook synchronization (users and organizations)
 
  
 
@@ -66,7 +68,7 @@ This file provides context for Claude Code (or other AI assistants) working on t
 
 npm install              # Install dependencies
 
-npm run dev              # Start dev server (port 4145)
+npm run dev              # Start dev server (port 4146)
 
  
 
@@ -96,45 +98,49 @@ npm run lint             # Run ESLint
 
 src/
 
-├── pages/               # Route pages (Index, DeviceEmulator, NotFound)
+├── pages/               # Route pages (Index, Login, DeviceEmulator, NotFound)
 
 ├── components/
 
-│   ├── ui/              # shadcn-ui component library
+│   ├── ui/              # shadcn-ui component library (Button, Card, Alert, etc.)
+
+│   ├── UserProfile.tsx  # User profile display with logout
+
+│   ├── ProtectedRoute.tsx # Authentication guard
 
 │   └── emulator/        # Emulator-specific components
 
 ├── lib/                 # Business logic & utilities
 
+│   ├── stackAuth.ts     # Stack Auth configuration and hooks
+
+│   ├── api.ts           # Cloudflare Workers API client
+
+│   ├── db.ts            # Turso database client
+
+│   ├── types.ts         # TypeScript type definitions
+
 │   ├── debugLogger.ts   # Debug logging system
 
-│   ├── ttnConfigStore.ts # TTN config state management
+│   └── utils.ts         # Utility functions (cn, etc.)
 
-│   ├── frostguardOrgSync.ts # FrostGuard API integration
+└── hooks/               # Custom React hooks
 
-│   └── ttn-payload.ts   # TTN types & utilities
 
-├── hooks/               # Custom React hooks
 
-└── integrations/supabase/ # Supabase client & types
+workers/
 
- 
+├── api/
 
-supabase/
+│   └── index.ts         # Cloudflare Workers API (devices, TTN, webhooks)
 
-├── functions/           # 17 Deno edge functions
+└── wrangler.toml        # Workers configuration
 
-│   ├── ttn-simulate/    # Simulate uplinks to TTN
 
-│   ├── ttn-preflight/   # Validate TTN config
 
-│   ├── ttn-webhook/     # Receive TTN webhooks
+db/
 
-│   ├── manage-ttn-settings/ # TTN connection testing
-
-│   └── ...
-
-└── migrations/          # Database migrations (16 files)
+└── schema.sql           # SQLite database schema
 
 ```
 
@@ -142,21 +148,25 @@ supabase/
 
 ## Key Files & Entry Points
 
- 
+
 
 | File | Purpose |
 
 |------|---------|
 
-| `src/components/LoRaWANEmulator.tsx` | Main orchestrator component (1600+ LOC) |
+| `src/lib/stackAuth.ts` | Stack Auth configuration, useStackAuth() hook |
 
-| `src/components/emulator/WebhookSettings.tsx` | TTN configuration UI (1700+ LOC) |
+| `src/pages/Login.tsx` | Custom industrial-themed login page (154 LOC) |
 
-| `src/components/emulator/DeviceManager.tsx` | Device management (1290 LOC) |
+| `src/components/UserProfile.tsx` | User profile display with logout (49 LOC) |
 
-| `src/lib/ttnConfigStore.ts` | Centralized TTN config state |
+| `src/components/ProtectedRoute.tsx` | Authentication guard for protected routes (37 LOC) |
 
-| `src/lib/frostguardOrgSync.ts` | FrostGuard API integration |
+| `src/lib/api.ts` | Cloudflare Workers API client with JWT auth (213 LOC) |
+
+| `workers/api/index.ts` | Workers API with JWT verification and webhooks (500+ LOC) |
+
+| `db/schema.sql` | Complete database schema (organizations, devices, telemetry, TTN settings) |
 
  
 
@@ -222,13 +232,15 @@ supabase/
 
 ### Multi-Tenant Design
 
-- User context selection via `UserSelectionGate.tsx`
+- **Stack Auth integration** with webhook-based user mirroring from FrostGuard
 
-- Organization-scoped TTN settings
+- **JWT-based authentication** with organizationId in client_metadata
 
-- FrostGuard sync for canonical data (sites, units, sensors)
+- **Organization-scoped data** - all API requests filtered by organizationId from JWT
 
-- Session storage for user context (1-hour expiry)
+- **Webhook sync** - FrostGuard pushes user/org changes to emulator endpoints
+
+- **Database isolation** - Organizations table with frostguard_org_id for mapping
 
  
 
@@ -256,39 +268,53 @@ supabase/
 
  
 
-## Edge Functions
+## Cloudflare Workers API
 
- 
 
-All edge functions are in `supabase/functions/`. Key patterns:
 
-- CORS headers on all functions
+All API endpoints are in `workers/api/index.ts`. Key patterns:
 
-- Service role key for elevated access
+- **JWKS-based JWT verification** using jose library
 
-- `verify_jwt = false` in config (handled manually)
+- **CORS headers** on all responses
 
-- Request ID propagation for debugging
+- **Organization scoping** - extract organizationId from JWT claims
 
- 
+- **Turso database client** for SQLite edge database
 
-### Common Edge Functions
+- **Webhook security** - verify FROSTGUARD_WEBHOOK_SECRET header
 
-| Function | Purpose |
+
+
+### API Endpoints
+
+| Endpoint | Purpose |
 
 |----------|---------|
 
-| `ttn-simulate` | Send simulated uplinks to TTN |
+| `GET /api/devices` | List devices for user's organization |
 
-| `ttn-preflight` | Validate TTN config before simulation |
+| `POST /api/devices` | Create new device |
 
-| `ttn-webhook` | Receive webhook callbacks from TTN |
+| `PUT /api/devices/:id` | Update device |
 
-| `manage-ttn-settings` | Test TTN API connection |
+| `DELETE /api/devices/:id` | Delete device |
 
-| `fetch-org-state` | Pull data from FrostGuard |
+| `GET /api/devices/:id/telemetry` | Get device telemetry data |
 
-| `sync-to-frostguard` | Push data to FrostGuard |
+| `POST /api/ttn/simulate/:id` | Simulate TTN uplink for device |
+
+| `GET /api/ttn-settings` | Get organization's TTN settings |
+
+| `POST /api/ttn-settings` | Create/update TTN settings |
+
+| `POST /api/ttn-settings/test` | Test TTN API connection |
+
+| `POST /api/sync/organization` | Webhook: Sync organization from FrostGuard |
+
+| `POST /api/sync/user` | Webhook: Create Stack Auth user from FrostGuard |
+
+| `GET /health` | Health check endpoint |
 
  
 
@@ -296,33 +322,27 @@ All edge functions are in `supabase/functions/`. Key patterns:
 
  
 
-### Critical (P0)
-
-- RLS policies on `ttn_settings` table need security review (migration fix exists)
-
- 
-
 ### Important (P1)
 
-- Inconsistent response envelopes across edge functions
+- **Stack Auth project setup required** - Users must create Stack Auth project and configure webhooks
 
-- Multiple sources of truth for TTN config
+- **FrostGuard webhook integration** - Requires FrostGuard to implement webhook endpoints
 
-- FrostGuard sync disabled for TTN settings
+- **Organization scoping enforcement** - Need to verify all API endpoints filter by organizationId
 
- 
+- **Error handling** - Improve error messages for webhook failures and JWT verification
+
+
 
 ### Nice-to-Have (P2)
 
-- Monolithic components (split large files like `LoRaWANEmulator.tsx`)
+- **Code splitting** - Bundle size is 990KB, consider dynamic imports
 
-- Debug logging consolidation needed
+- **Monitoring** - Add logging/monitoring for webhook calls
 
-- Dead code cleanup
+- **User management UI** - Admin interface to manage users and orgs
 
- 
-
-See `FROSTGUARD_AUDIT_REPORT.md` for detailed audit findings.
+- **Testing** - Add unit and integration tests for Workers API
 
  
 
@@ -346,15 +366,49 @@ If adding tests:
 
 ## Environment Variables
 
- 
 
-Required in `.env`:
+
+**Frontend (.env):**
 
 ```
 
-VITE_SUPABASE_URL=<supabase-project-url>
+# Stack Auth
 
-VITE_SUPABASE_ANON_KEY=<supabase-anon-key>
+VITE_STACK_PROJECT_ID=<your-stack-project-id>
+
+VITE_STACK_PUBLISHABLE_CLIENT_KEY=<your-stack-publishable-key>
+
+
+
+# Cloudflare Workers API
+
+VITE_API_BASE_URL=http://localhost:8787
+
+
+
+# Turso Database (optional for local dev)
+
+VITE_TURSO_DATABASE_URL=file:local.db
+
+VITE_TURSO_AUTH_TOKEN=
+
+```
+
+
+
+**Workers API (Cloudflare secrets):**
+
+```
+
+STACK_PROJECT_ID=<your-stack-project-id>
+
+STACK_SECRET_SERVER_KEY=<your-stack-secret-server-key>
+
+FROSTGUARD_WEBHOOK_SECRET=<generate-strong-random-secret>
+
+TURSO_DATABASE_URL=<your-turso-url>
+
+TURSO_AUTH_TOKEN=<your-turso-token>
 
 ```
 
@@ -372,16 +426,22 @@ VITE_SUPABASE_ANON_KEY=<supabase-anon-key>
 
 4. **UI components:** Check `src/components/ui/` before creating new components - shadcn has 30+ ready to use
 
-5. **Supabase types:** Run Supabase CLI to regenerate types after schema changes
+5. **Stack Auth:** Use `useStackAuth()` hook from `@/lib/stackAuth` to get user info and auth state
+
+6. **Database schema:** Update `db/schema.sql` and run migrations on Turso when making schema changes
 
  
 
 ## Related Documentation
 
- 
 
-- `README.md` - Basic setup instructions
 
-- `TTN_SYNC_SETUP.md` - Detailed TTN integration guide
+- `README.md` - Basic setup instructions and quick start guide
 
-- `FROSTGUARD_AUDIT_REPORT.md` - Comprehensive architecture audit
+- `STACK_AUTH_IMPLEMENTATION.md` - Complete Stack Auth setup, webhook integration, and testing
+
+- `TURSO_MIGRATION.md` - Details on Supabase to Turso migration
+
+- `TTN_SYNC_SETUP.md` - Detailed TTN integration guide (to be created)
+
+- `db/schema.sql` - Complete database schema with comments

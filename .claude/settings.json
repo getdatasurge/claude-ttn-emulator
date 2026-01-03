@@ -1,0 +1,21 @@
+{
+  "enabledPlugins": {
+    "feature-dev@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": true,
+    "context7@claude-plugins-official": true,
+    "commit-commands@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true,
+    "serena@claude-plugins-official": true,
+    "ralph-wiggum@claude-plugins-official": true,
+    "hookify@claude-plugins-official": true,
+    "document-skills@anthropic-agent-skills": true,
+    "feature-dev@claude-code-plugins": true,
+    "frontend-design@claude-code-plugins": true,
+    "ralph-wiggum@claude-code-plugins": true
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "input=$(cat); printf \"\\033[32m$(whoami)@$(hostname -s)\\033[0m:\\033[34m$(basename \"$(echo \"$input\" | jq -r '.workspace.current_dir')\")\\033[0m [\\033[35m$(echo \"$input\" | jq -r '.model.display_name' | cut -d' ' -f1-2)\\033[0m]\\033[0m\""
+  }
+}

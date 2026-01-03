@@ -28,6 +28,13 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+.env.development
+.env.production
+.dev.vars
+
+# Local database
+local.db
+*.db
 
 # Build outputs
 /dist
@@ -38,3 +45,12 @@ dist-ssr
 
 # OS
 Thumbs.db
+
+# Downloaded packages
+*.tgz
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Wrangler temp files
+workers/.wrangler/

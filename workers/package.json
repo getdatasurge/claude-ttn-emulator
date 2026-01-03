@@ -1,0 +1,11 @@
+{
+  "name": "frostguard-api-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@libsql/client": "^0.14.0",
+    "itty-router": "^5.0.22",
+    "jose": "^6.1.3"
+  }
+}

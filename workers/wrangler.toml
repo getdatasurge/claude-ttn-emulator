@@ -1,0 +1,28 @@
+# Cloudflare Workers configuration for FrostGuard LoRaWAN Emulator API
+
+name = "frostguard-api"
+main = "api/index.ts"
+compatibility_date = "2024-01-01"
+
+# Development configuration (local Turso database)
+[vars]
+ENVIRONMENT = "development"
+TURSO_DATABASE_URL = "libsql://frostguard-local-getdatasurge.aws-us-east-1.turso.io"
+
+# Production configuration
+[env.production]
+name = "frostguard-api"
+vars = { ENVIRONMENT = "production" }
+
+# Environment variables (secrets)
+# Set these using: wrangler secret put TURSO_DATABASE_URL
+# and: wrangler secret put TURSO_AUTH_TOKEN
+#
+# [vars]
+# TURSO_DATABASE_URL = "libsql://your-database.turso.io"
+# TURSO_AUTH_TOKEN = "your-auth-token-here"
+
+# Routes configuration (optional - for custom domains)
+# [route]
+# pattern = "api.your-domain.com/*"
+# zone_name = "your-domain.com"
