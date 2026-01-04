@@ -17,6 +17,7 @@ import {
   Play,
   Square,
   User,
+  Loader2,
 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -29,6 +30,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { isStackAuthConfigured } from '@/lib/stackAuth'
+import { useEmulation } from '@/hooks/useEmulation'
 
 // Tab components
 import { SensorsTab } from './tabs/SensorsTab'
@@ -40,27 +42,33 @@ import { MonitorTab } from './tabs/MonitorTab'
 import { LogsTab } from './tabs/LogsTab'
 import { UserProfile } from '@/components/UserProfile'
 
-type EmulatorStatus = 'stopped' | 'running' | 'error'
-
 export function EmulatorApp() {
   const [activeTab, setActiveTab] = useState('sensors')
-  const [emulatorStatus, setEmulatorStatus] = useState<EmulatorStatus>('stopped')
-  const [readingsCount, setReadingsCount] = useState(0)
   const [selectedOrg, setSelectedOrg] = useState('default')
+  const [isSendingSingle, setIsSendingSingle] = useState(false)
+
+  // Use the emulation hook for all emulation logic
+  const {
+    status: emulatorStatus,
+    readingsCount,
+    activeDeviceCount,
+    startEmulation,
+    stopEmulation,
+    sendSingleReading,
+  } = useEmulation({ defaultInterval: 30000 })
 
   const handleStartEmulation = () => {
-    setEmulatorStatus('running')
-    // TODO: Start actual emulation
+    startEmulation()
   }
 
   const handleStopEmulation = () => {
-    setEmulatorStatus('stopped')
-    // TODO: Stop actual emulation
+    stopEmulation()
   }
 
-  const handleSingleReading = () => {
-    setReadingsCount((prev) => prev + 1)
-    // TODO: Send single reading
+  const handleSingleReading = async () => {
+    setIsSendingSingle(true)
+    await sendSingleReading()
+    setIsSendingSingle(false)
   }
 
   return (
@@ -100,6 +108,12 @@ export function EmulatorApp() {
                 >
                   {emulatorStatus === 'running' ? 'Running' : emulatorStatus === 'error' ? 'Error' : 'Stopped'}
                 </StatusPill>
+                <StatusPill
+                  variant={activeDeviceCount > 0 ? 'info' : 'warning'}
+                  dot={false}
+                >
+                  {activeDeviceCount} device{activeDeviceCount !== 1 ? 's' : ''}
+                </StatusPill>
                 {readingsCount > 0 && (
                   <StatusPill variant="info" dot={false}>
                     {readingsCount} readings
@@ -124,12 +138,20 @@ export function EmulatorApp() {
                   variant="default"
                   size="sm"
                   onClick={handleStartEmulation}
+                  disabled={activeDeviceCount === 0}
+                  title={activeDeviceCount === 0 ? 'Add active devices to start emulation' : undefined}
                 >
                   <Play className="w-4 h-4 mr-1" />
                   Start Emulation
                 </Button>
               )}
-              <Button variant="outline" size="sm" onClick={handleSingleReading}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSingleReading}
+                disabled={isSendingSingle || activeDeviceCount === 0}
+              >
+                {isSendingSingle && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
                 Single Reading
               </Button>
               <Button variant="ghost" size="icon" className="h-8 w-8">
