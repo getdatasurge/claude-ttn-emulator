@@ -103,7 +103,63 @@ export default defineConfig(({ mode }) => {
       minify: 'terser',
       sourcemap: mode === 'development',
       rollupOptions: {
-        // Let Vite handle chunk splitting automatically to avoid React bundling issues
+        output: {
+          manualChunks: (id) => {
+            // Keep React and ReactDOM together - critical for hooks
+            if (id.includes('node_modules/react') ||
+                id.includes('node_modules/react-dom') ||
+                id.includes('node_modules/scheduler')) {
+              return 'vendor-react'
+            }
+            // Recharts is large, split it out (only used in emulator)
+            if (id.includes('node_modules/recharts') ||
+                id.includes('node_modules/d3-')) {
+              return 'vendor-charts'
+            }
+            // Redux and state management
+            if (id.includes('node_modules/@reduxjs') ||
+                id.includes('node_modules/redux') ||
+                id.includes('node_modules/react-redux') ||
+                id.includes('node_modules/immer')) {
+              return 'vendor-state'
+            }
+            // React Query
+            if (id.includes('node_modules/@tanstack')) {
+              return 'vendor-query'
+            }
+            // Radix UI components
+            if (id.includes('node_modules/@radix-ui')) {
+              return 'vendor-ui'
+            }
+            // Lucide icons - can be large
+            if (id.includes('node_modules/lucide-react')) {
+              return 'vendor-icons'
+            }
+            // Forms and validation
+            if (id.includes('node_modules/react-hook-form') ||
+                id.includes('node_modules/zod') ||
+                id.includes('node_modules/@hookform')) {
+              return 'vendor-forms'
+            }
+            // Stack Auth (optional module)
+            if (id.includes('node_modules/@stackframe')) {
+              return 'vendor-auth'
+            }
+            // JWT/crypto
+            if (id.includes('node_modules/jose')) {
+              return 'vendor-crypto'
+            }
+            // React router
+            if (id.includes('node_modules/react-router') ||
+                id.includes('node_modules/@remix-run')) {
+              return 'vendor-router'
+            }
+            // Other vendor modules
+            if (id.includes('node_modules/')) {
+              return 'vendor-misc'
+            }
+          },
+        },
       },
       terserOptions: {
         compress: {
@@ -111,7 +167,7 @@ export default defineConfig(({ mode }) => {
           drop_debugger: mode === 'production',
         },
       },
-      chunkSizeWarningLimit: 600, // Warn for chunks larger than 600kb
+      chunkSizeWarningLimit: 500, // Lower the warning threshold
     },
 
     optimizeDeps: {
