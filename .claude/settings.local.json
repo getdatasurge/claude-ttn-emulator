@@ -53,7 +53,8 @@
       "Bash(npm pack:*)",
       "Bash(npm run type-check:*)",
       "Bash(npm ls:*)",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(npm test:*)"
     ]
   }
 }

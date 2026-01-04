@@ -4,10 +4,9 @@
 
 import { describe, it, expect, vi } from 'vitest'
 import { configureStore } from '@reduxjs/toolkit'
-import authSlice, {
+import authReducer, {
   initializeAuth,
   signOut,
-  refreshUserData,
   updateLastActivity,
   setOnlineStatus,
   selectIsAuthenticated,
@@ -17,17 +16,31 @@ import authSlice, {
 
 // Mock Stack Auth
 vi.mock('@/lib/stackAuth', () => ({
+  isStackAuthConfigured: true,
   stackClientApp: {
     getUser: vi.fn(),
     signOut: vi.fn(),
   },
 }))
 
+// Define initial state manually since we export reducer, not slice
+const initialAuthState = {
+  user: null,
+  isAuthenticated: false,
+  isLoading: true,
+  error: null,
+  organizationId: null,
+  role: null,
+  sessionExpiry: null,
+  lastActivity: Date.now(),
+  isOnline: true,
+}
+
 describe('authSlice', () => {
   const createStore = (initialState = {}) =>
     configureStore({
-      reducer: { auth: authSlice },
-      preloadedState: { auth: { ...authSlice.getInitialState(), ...initialState } },
+      reducer: { auth: authReducer },
+      preloadedState: { auth: { ...initialAuthState, ...initialState } as any },
     })
 
   describe('initial state', () => {
