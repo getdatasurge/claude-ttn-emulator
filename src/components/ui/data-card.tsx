@@ -66,10 +66,8 @@ export function MetricCard({
   value,
   unit,
   icon: Icon,
-  trend,
   className,
 }: MetricCardProps) {
-  const trendDirection = typeof trend === 'object' ? trend.direction : trend
   return (
     <div className={cn('text-center p-3 bg-muted/30 rounded-lg', className)}>
       {Icon && (

@@ -3,12 +3,12 @@
  * Tracks Core Web Vitals and performance metrics
  */
 
-import React, { useEffect } from 'react'
+import { useEffect } from 'react'
 import { useAppDispatch } from '@/store'
 import { setPerformanceMetrics } from '@/store/slices/uiSlice'
 
 // Import web-vitals functions
-import { getCLS, getFID, getFCP, getLCP, getTTFB, onTTFB } from 'web-vitals'
+import { getCLS, getFID, getFCP, getLCP, getTTFB } from 'web-vitals'
 
 interface PerformanceEntry {
   name: string

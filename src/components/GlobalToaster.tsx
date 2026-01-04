@@ -3,10 +3,9 @@
  * Integrates Redux UI state with toast notifications
  */
 
-import React, { useEffect } from 'react'
+import { useEffect } from 'react'
 import { useAppSelector, useAppDispatch } from '@/store'
 import { selectToasts, removeToast } from '@/store/slices/uiSlice'
-import { Toast } from '@/components/ui/toast'
 import { useToast } from '@/hooks/use-toast'
 
 export function GlobalToaster() {
@@ -17,17 +16,10 @@ export function GlobalToaster() {
   useEffect(() => {
     // Process Redux toasts and show them using the shadcn toast system
     toasts.forEach(toastData => {
-      // Avoid showing the same toast multiple times
-      const toastId = `redux-toast-${toastData.id}`
-      
       toast({
         title: toastData.title,
         description: toastData.description,
         variant: toastData.type === 'error' ? 'destructive' : 'default',
-        action: toastData.action ? {
-          label: toastData.action.label,
-          onClick: toastData.action.onClick,
-        } : undefined,
         duration: toastData.duration || (toastData.type === 'error' ? 10000 : 5000),
       })
 

@@ -162,7 +162,7 @@ export const saveTTNConfig = createAsyncThunk(
 
 export const testTTNConfig = createAsyncThunk(
   'ttnConfig/testConfig',
-  async (config?: TTNConfig, { getState, rejectWithValue }) => {
+  async (config: TTNConfig | undefined, { getState, rejectWithValue }) => {
     const state = (getState() as { ttnConfig: TTNConfigState }).ttnConfig
     const testConfig = config || state.config
     

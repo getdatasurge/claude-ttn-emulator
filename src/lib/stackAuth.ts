@@ -15,13 +15,15 @@ export const isStackAuthConfigured =
   uuidPattern.test(projectId) && publishableKey.length > 0
 
 // Placeholder types when Stack Auth is not available
-type StackUser = {
+export type StackUser = {
   id: string
   primaryEmail?: string
   displayName?: string
   selectedTeam?: { id: string }
   clientMetadata?: Record<string, unknown>
   getAuthJson?: () => Promise<{ accessToken: string }>
+  getAuthHeaders?: () => Promise<Record<string, string>>
+  signOut?: () => Promise<void>
 }
 
 // Only export stackClientApp and useUser when configured
