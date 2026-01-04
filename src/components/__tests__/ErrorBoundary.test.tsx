@@ -151,30 +151,32 @@ describe('ComponentErrorBoundary', () => {
 
   it('should have retry functionality', async () => {
     const user = userEvent.setup()
-    let shouldThrow = true
-    
-    const { rerender } = render(
+
+    // Use a ref-like pattern so the value can be changed before retry renders
+    const throwState = { shouldThrow: true }
+
+    const ConditionalThrow = () => {
+      if (throwState.shouldThrow) {
+        throw new Error('Component error')
+      }
+      return <div>No error</div>
+    }
+
+    render(
       <ComponentErrorBoundary onError={mockOnError}>
-        <ThrowError shouldThrow={shouldThrow} />
+        <ConditionalThrow />
       </ComponentErrorBoundary>
     )
 
     // Error should be displayed
     expect(screen.getByText(/failed to load component/i)).toBeInTheDocument()
 
-    // Fix the component
-    shouldThrow = false
+    // Fix the component BEFORE clicking retry
+    throwState.shouldThrow = false
 
-    // Click retry
+    // Click retry - now when the boundary re-renders children, they won't throw
     const retryButton = screen.getByRole('button', { name: /retry/i })
     await user.click(retryButton)
-
-    // Re-render with fixed component
-    rerender(
-      <ComponentErrorBoundary onError={mockOnError}>
-        <ThrowError shouldThrow={shouldThrow} />
-      </ComponentErrorBoundary>
-    )
 
     // Should show the working component
     expect(screen.getByText('No error')).toBeInTheDocument()

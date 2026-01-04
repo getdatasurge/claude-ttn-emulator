@@ -183,8 +183,10 @@ describe('useDevices', () => {
         result.current.createDevice(newDevice)
       })
 
-      // Should be creating
-      expect(result.current.isCreating).toBe(true)
+      // Should be creating - wait for React to update the state
+      await waitFor(() => {
+        expect(result.current.isCreating).toBe(true)
+      })
 
       await waitFor(() => {
         expect(result.current.isCreating).toBe(false)
@@ -270,8 +272,10 @@ describe('useDevices', () => {
         })
       })
 
-      // Should be updating
-      expect(result.current.isUpdating).toBe(true)
+      // Should be updating - wait for React to update the state
+      await waitFor(() => {
+        expect(result.current.isUpdating).toBe(true)
+      })
 
       await waitFor(() => {
         expect(result.current.isUpdating).toBe(false)
@@ -337,8 +341,10 @@ describe('useDevices', () => {
         result.current.deleteDevice('dev-123')
       })
 
-      // Should be deleting
-      expect(result.current.isDeleting).toBe(true)
+      // Should be deleting - wait for React to update the state
+      await waitFor(() => {
+        expect(result.current.isDeleting).toBe(true)
+      })
 
       await waitFor(() => {
         expect(result.current.isDeleting).toBe(false)
