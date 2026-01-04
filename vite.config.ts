@@ -122,7 +122,8 @@ export default defineConfig(({ mode }) => {
         '@reduxjs/toolkit',
         'react-redux',
         '@tanstack/react-query',
-        '@stackframe/react',
+        // Note: @stackframe/react is dynamically imported only when configured
+        // Do NOT include it here - it causes React hook bundling issues in production
       ],
     },
 
