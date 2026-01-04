@@ -82,6 +82,8 @@ export default defineConfig(({ mode }) => {
         '@lib': path.resolve(__dirname, './src/lib'),
         '@store': path.resolve(__dirname, './src/store'),
       },
+      // Deduplicate React to prevent multiple instances
+      dedupe: ['react', 'react-dom'],
     },
 
     server: {
@@ -105,7 +107,8 @@ export default defineConfig(({ mode }) => {
           manualChunks: (id) => {
             // Vendor chunks
             if (id.includes('node_modules')) {
-              if (id.includes('react') || id.includes('react-dom')) {
+              // Bundle @stackframe/react with React to avoid version mismatch
+              if (id.includes('react') || id.includes('react-dom') || id.includes('@stackframe')) {
                 return 'react-vendor'
               }
               if (id.includes('@reduxjs') || id.includes('react-redux')) {
@@ -150,6 +153,7 @@ export default defineConfig(({ mode }) => {
         '@reduxjs/toolkit',
         'react-redux',
         '@tanstack/react-query',
+        '@stackframe/react',
       ],
     },
 
