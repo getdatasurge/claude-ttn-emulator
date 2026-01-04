@@ -1,3 +1,4 @@
+// FrostGuard LoRaWAN Device Emulator - Entry Point
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'

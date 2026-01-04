@@ -1,13 +1,12 @@
-import { Suspense, lazy, useEffect } from 'react'
+import { Suspense, lazy, useEffect, useState, ComponentType, ReactNode } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { StackProvider, StackTheme } from '@stackframe/react'
 import { Provider as ReduxProvider } from 'react-redux'
 import { HelmetProvider } from 'react-helmet-async'
 import { ErrorBoundary } from 'react-error-boundary'
 
 import { store, useAppDispatch } from '@/store'
-import { stackClientApp, isStackAuthConfigured } from '@/lib/stackAuth'
+import { isStackAuthConfigured } from '@/lib/stackAuth'
 import { initializeAuth } from '@/store/slices/authSlice'
 import { setOnlineStatus } from '@/store/slices/uiSlice'
 import { ErrorFallback } from '@/components/ErrorBoundary'
@@ -104,6 +103,53 @@ function AppContent() {
   )
 }
 
+// Dynamic Stack Auth wrapper - only loads when configured
+function StackAuthWrapper({ children }: { children: ReactNode }) {
+  const [StackComponents, setStackComponents] = useState<{
+    StackProvider: ComponentType<{ app: any; children: ReactNode }>
+    StackTheme: ComponentType<{ children: ReactNode }>
+    app: any
+  } | null>(null)
+
+  useEffect(() => {
+    if (isStackAuthConfigured) {
+      Promise.all([
+        import('@stackframe/react'),
+        import('@/lib/stackAuth').then(m => m.stackClientApp)
+      ]).then(([stackModule, app]) => {
+        // Wait a tick for stackClientApp to be initialized
+        setTimeout(() => {
+          import('@/lib/stackAuth').then(m => {
+            setStackComponents({
+              StackProvider: stackModule.StackProvider,
+              StackTheme: stackModule.StackTheme,
+              app: m.stackClientApp
+            })
+          })
+        }, 100)
+      }).catch(err => {
+        console.warn('Failed to load Stack Auth:', err)
+      })
+    }
+  }, [])
+
+  if (!isStackAuthConfigured) {
+    return <>{children}</>
+  }
+
+  if (!StackComponents || !StackComponents.app) {
+    return <>{children}</> // Render without auth wrapper while loading
+  }
+
+  return (
+    <StackComponents.StackProvider app={StackComponents.app}>
+      <StackComponents.StackTheme>
+        {children}
+      </StackComponents.StackTheme>
+    </StackComponents.StackProvider>
+  )
+}
+
 function App() {
   return (
     <ErrorBoundary
@@ -116,15 +162,9 @@ function App() {
       <HelmetProvider>
         <ReduxProvider store={store}>
           <QueryClientProvider client={queryClient}>
-            {isStackAuthConfigured ? (
-              <StackProvider app={stackClientApp}>
-                <StackTheme>
-                  <AppContent />
-                </StackTheme>
-              </StackProvider>
-            ) : (
+            <StackAuthWrapper>
               <AppContent />
-            )}
+            </StackAuthWrapper>
           </QueryClientProvider>
         </ReduxProvider>
       </HelmetProvider>

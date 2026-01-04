@@ -4,9 +4,7 @@
  * Users are mirrored from FrostGuard via webhook
  */
 
-import { StackClientApp, useUser } from '@stackframe/react'
-
-// Check if Stack Auth is properly configured
+// Check if Stack Auth is properly configured BEFORE importing
 const projectId = import.meta.env.VITE_STACK_PROJECT_ID || ''
 const publishableKey = import.meta.env.VITE_STACK_PUBLISHABLE_CLIENT_KEY || ''
 
@@ -16,19 +14,52 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 export const isStackAuthConfigured =
   uuidPattern.test(projectId) && publishableKey.length > 0
 
-// Only create the app if properly configured, otherwise create a dummy
-export const stackClientApp = isStackAuthConfigured
-  ? new StackClientApp({
+// Placeholder types when Stack Auth is not available
+type StackUser = {
+  id: string
+  primaryEmail?: string
+  displayName?: string
+  selectedTeam?: { id: string }
+  clientMetadata?: Record<string, unknown>
+  getAuthJson?: () => Promise<{ accessToken: string }>
+}
+
+// Only export stackClientApp and useUser when configured
+export let stackClientApp: any = null
+export let useUser: () => StackUser | null = () => null
+
+// Dynamically import Stack Auth only if configured
+if (isStackAuthConfigured) {
+  import('@stackframe/react').then(({ StackClientApp, useUser: stackUseUser }) => {
+    stackClientApp = new StackClientApp({
       projectId,
       publishableClientKey: publishableKey,
       tokenStore: 'cookie',
     })
-  : null as any // Will be wrapped in conditional rendering
+    useUser = stackUseUser
+  }).catch((err) => {
+    console.warn('Failed to load Stack Auth:', err)
+  })
+}
 
 /**
  * Get current authenticated user
+ * Returns dummy values when Stack Auth is not configured
  */
 export function useStackAuth() {
+  // If not configured, return empty auth state
+  if (!isStackAuthConfigured) {
+    return {
+      user: null,
+      isAuthenticated: false,
+      userId: undefined,
+      email: undefined,
+      displayName: undefined,
+      organizationId: 'default',
+      role: 'viewer',
+    }
+  }
+
   const user = useUser()
 
   return {
@@ -38,16 +69,16 @@ export function useStackAuth() {
     email: user?.primaryEmail,
     displayName: user?.displayName,
     // Extract organization from custom user metadata or team
-    organizationId: user?.selectedTeam?.id || user?.clientMetadata?.organizationId as string | undefined || user?.id,
-    role: user?.clientMetadata?.role as string | undefined || 'viewer',
+    organizationId: user?.selectedTeam?.id || (user?.clientMetadata?.organizationId as string | undefined) || user?.id,
+    role: (user?.clientMetadata?.role as string | undefined) || 'viewer',
   }
 }
 
 /**
  * Get auth header for API requests
  */
-export async function getStackAuthHeader(user: any): Promise<Record<string, string>> {
-  if (!user) return {}
+export async function getStackAuthHeader(user: StackUser | null): Promise<Record<string, string>> {
+  if (!user || !user.getAuthJson) return {}
 
   try {
     const authJson = await user.getAuthJson()
