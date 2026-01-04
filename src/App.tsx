@@ -45,7 +45,7 @@ function LoadingFallback() {
   )
 }
 
-function AppInitializer({ children }: { children: React.ReactNode }) {
+function AppInitializer({ children }: { children: ReactNode }) {
   const dispatch = useAppDispatch()
 
   useEffect(() => {
@@ -116,7 +116,7 @@ function StackAuthWrapper({ children }: { children: ReactNode }) {
       Promise.all([
         import('@stackframe/react'),
         import('@/lib/stackAuth').then(m => m.stackClientApp)
-      ]).then(([stackModule, app]) => {
+      ]).then(([stackModule]) => {
         // Wait a tick for stackClientApp to be initialized
         setTimeout(() => {
           import('@/lib/stackAuth').then(m => {
