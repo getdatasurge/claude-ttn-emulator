@@ -103,38 +103,7 @@ export default defineConfig(({ mode }) => {
       minify: 'terser',
       sourcemap: mode === 'development',
       rollupOptions: {
-        output: {
-          manualChunks: (id) => {
-            // Vendor chunks
-            if (id.includes('node_modules')) {
-              // Bundle @stackframe/react with React to avoid version mismatch
-              if (id.includes('react') || id.includes('react-dom') || id.includes('@stackframe')) {
-                return 'react-vendor'
-              }
-              if (id.includes('@reduxjs') || id.includes('react-redux')) {
-                return 'redux-vendor'
-              }
-              if (id.includes('@tanstack/react-query')) {
-                return 'query-vendor'
-              }
-              if (id.includes('@radix-ui') || id.includes('lucide-react')) {
-                return 'ui-vendor'
-              }
-              if (id.includes('recharts')) {
-                return 'charts-vendor'
-              }
-              return 'vendor'
-            }
-
-            // Feature-based chunks
-            if (id.includes('/components/emulator/')) {
-              return 'emulator'
-            }
-            if (id.includes('/store/')) {
-              return 'store'
-            }
-          },
-        },
+        // Let Vite handle chunk splitting automatically to avoid React bundling issues
       },
       terserOptions: {
         compress: {
