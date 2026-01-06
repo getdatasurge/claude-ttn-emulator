@@ -6,6 +6,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { stackClientApp, isStackAuthConfigured } from '@/lib/stackAuth'
+import { useAppDispatch } from '@/store'
+import { refreshUserData } from '@/store/slices/authSlice'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -15,6 +17,7 @@ import { Radio, AlertCircle, Settings } from 'lucide-react'
 
 export default function Login() {
   const navigate = useNavigate()
+  const dispatch = useAppDispatch()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -41,6 +44,9 @@ export default function Login() {
       if (result.status === 'error') {
         throw new Error(result.error?.message || 'Sign in failed')
       }
+
+      // Refresh Redux auth state with the new user data
+      await dispatch(refreshUserData()).unwrap()
 
       // Navigate to emulator after successful login
       navigate('/emulator')
