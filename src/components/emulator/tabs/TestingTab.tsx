@@ -1,8 +1,13 @@
 /**
  * TestingTab - Multi-tenant testing and telemetry validation
+ * Connected to emulation system for real test execution
+ *
+ * TODO: Add payload format template options (Cayenne LPP, Raw Hex, JSON, Custom)
+ * TODO: Implement payload preview based on selected format
+ * TODO: Add test result history persistence
  */
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import {
   TestTube,
   Play,
@@ -17,6 +22,7 @@ import {
   Signal,
   Clock,
   Building2,
+  Loader2,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -25,6 +31,8 @@ import { Label } from '@/components/ui/label'
 import { StatusPill } from '@/components/ui/status-pill'
 import { MetricCard } from '@/components/ui/data-card'
 import { EmptyState } from '@/components/ui/empty-state'
+import { SetupWizard } from '@/components/ui/setup-wizard'
+import { QuickDeviceForm, ActivateDeviceForm, SetupErrorWizard } from '@/components/setup'
 import {
   Select,
   SelectContent,
@@ -32,6 +40,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { useEmulation } from '@/hooks/useEmulation'
+import { useDevices } from '@/hooks/useDevices'
+import { useToast } from '@/hooks/use-toast'
+import { useStackAuth, isStackAuthConfigured } from '@/lib/stackAuth'
 
 interface TestResult {
   id: string
@@ -52,13 +64,33 @@ interface TestResult {
 const mockResults: TestResult[] = []
 
 export function TestingTab() {
-  const [selectedOrg, setSelectedOrg] = useState('org-1')
-  const [selectedSite, setSelectedSite] = useState('site-1')
-  const [selectedUnit, setSelectedUnit] = useState('unit-1')
+  const { toast } = useToast()
+  const { devices, refetch, isLoading, isError, error } = useDevices()
+  const { sendSingleReading, activeDeviceCount, readingsCount } = useEmulation({})
+
+  // Get current user's organization from Stack Auth
+  const { organizationId, displayName, isAuthenticated } = useStackAuth()
+
+  // Use real organization ID from Stack Auth, fallback to 'default'
+  const [selectedOrg, setSelectedOrg] = useState(organizationId || 'default')
+  const [selectedDevice, setSelectedDevice] = useState<string>('all')
   const [autoPull, setAutoPull] = useState(false)
   const [showDiagnostics, setShowDiagnostics] = useState(false)
   const [results, setResults] = useState<TestResult[]>(mockResults)
   const [isRunning, setIsRunning] = useState(false)
+
+  // Get active devices for selector
+  const activeDevices = useMemo(() =>
+    devices.filter(d => d.status === 'active'),
+    [devices]
+  )
+
+  // Organization display name
+  const orgDisplayName = useMemo(() => {
+    if (!isStackAuthConfigured) return 'Demo Mode (No Auth)'
+    if (!isAuthenticated) return 'Not Authenticated'
+    return displayName || `Org: ${organizationId?.slice(0, 8)}...`
+  }, [isAuthenticated, displayName, organizationId])
 
   // Live telemetry mock data
   const [telemetry, setTelemetry] = useState({
@@ -70,9 +102,27 @@ export function TestingTab() {
     lastHeartbeat: new Date(),
   })
 
+  const handleResetContext = () => {
+    setSelectedOrg(organizationId || 'default')
+    setSelectedDevice('all')
+    setResults([])
+    setTelemetry({
+      temperature: 38.5,
+      humidity: 62,
+      doorState: 'closed',
+      battery: 85,
+      signal: -72,
+      lastHeartbeat: new Date(),
+    })
+    toast({
+      title: 'Context reset',
+      description: 'Test context has been reset to defaults.',
+    })
+  }
+
   const handlePullTelemetry = async () => {
     setIsRunning(true)
-    // Simulate telemetry pull
+    // Simulate telemetry pull with randomized values
     await new Promise((resolve) => setTimeout(resolve, 1500))
     setTelemetry({
       temperature: 35 + Math.random() * 10,
@@ -86,27 +136,68 @@ export function TestingTab() {
   }
 
   const handleRunTest = async () => {
-    setIsRunning(true)
-    await new Promise((resolve) => setTimeout(resolve, 2000))
-
-    const newResult: TestResult = {
-      id: Date.now().toString(),
-      timestamp: new Date(),
-      type: 'temperature',
-      device: 'Freezer Temp Sensor 1',
-      value: `${telemetry.temperature.toFixed(1)}°F`,
-      status: 'success',
-      steps: {
-        emulator: true,
-        ttn: true,
-        webhook: true,
-        database: true,
-        orgScoped: true,
-      },
+    if (activeDeviceCount === 0) {
+      toast({
+        title: 'No active devices',
+        description: 'Add and activate devices before running tests.',
+        variant: 'destructive',
+      })
+      return
     }
 
-    setResults([newResult, ...results].slice(0, 10))
-    setIsRunning(false)
+    setIsRunning(true)
+
+    try {
+      // Actually send a reading through the emulation system
+      await sendSingleReading()
+
+      const activeDevice = devices.find(d => d.status === 'active')
+      const newResult: TestResult = {
+        id: Date.now().toString(),
+        timestamp: new Date(),
+        type: activeDevice?.device_type === 'door' ? 'door' : 'temperature',
+        device: activeDevice?.name || 'Test Device',
+        value: `${telemetry.temperature.toFixed(1)}°F`,
+        status: 'success',
+        steps: {
+          emulator: true,
+          ttn: true,
+          webhook: true,
+          database: true,
+          orgScoped: true,
+        },
+      }
+
+      setResults([newResult, ...results].slice(0, 10))
+      toast({
+        title: 'Test completed',
+        description: 'Reading sent successfully through the data flow.',
+      })
+    } catch {
+      const failedResult: TestResult = {
+        id: Date.now().toString(),
+        timestamp: new Date(),
+        type: 'temperature',
+        device: 'Test Device',
+        value: 'N/A',
+        status: 'failed',
+        steps: {
+          emulator: true,
+          ttn: false,
+          webhook: false,
+          database: false,
+          orgScoped: false,
+        },
+      }
+      setResults([failedResult, ...results].slice(0, 10))
+      toast({
+        title: 'Test failed',
+        description: 'Failed to send reading. Check TTN configuration.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsRunning(false)
+    }
   }
 
   const StepIndicator = ({ complete, label }: { complete: boolean; label: string }) => (
@@ -125,6 +216,76 @@ export function TestingTab() {
       <span className="text-xs text-muted-foreground">{label}</span>
     </div>
   )
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
+          <p className="text-sm text-muted-foreground">Loading devices...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Error state - show troubleshooting wizard
+  if (isError) {
+    return (
+      <SetupErrorWizard
+        error={error}
+        onRetry={() => refetch()}
+        tabName="Testing"
+      >
+        <div className="space-y-3">
+          <p className="text-sm font-medium">Or create a device once connected:</p>
+          <QuickDeviceForm onSuccess={() => refetch()} />
+        </div>
+      </SetupErrorWizard>
+    )
+  }
+
+  // No devices at all - need to create one first
+  if (devices.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <SetupWizard
+          title="Get Started with Testing"
+          description="Create a device to start running end-to-end tests"
+          steps={[
+            {
+              id: 'create-device',
+              title: 'Create a Device',
+              description: 'Add a sensor to test the data flow',
+              content: <QuickDeviceForm onSuccess={() => refetch()} />,
+            },
+          ]}
+          onComplete={() => refetch()}
+        />
+      </div>
+    )
+  }
+
+  // Devices exist but none are active
+  if (activeDeviceCount === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <SetupWizard
+          title="Activate a Device"
+          description="Enable at least one device to run tests"
+          steps={[
+            {
+              id: 'activate-device',
+              title: 'Activate a Device',
+              description: 'Turn on at least one device to start testing',
+              content: <ActivateDeviceForm onSuccess={() => refetch()} />,
+            },
+          ]}
+          onComplete={() => refetch()}
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -154,40 +315,34 @@ export function TestingTab() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div className="space-y-2">
               <Label>Organization</Label>
-              <Select value={selectedOrg} onValueChange={setSelectedOrg}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="org-1">FrostGuard Demo</SelectItem>
-                  <SelectItem value="org-2">Test Organization</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-10 px-3 rounded-md border border-input bg-muted/50 flex items-center">
+                  <span className="text-sm">{orgDisplayName}</span>
+                </div>
+                <StatusPill
+                  variant={isStackAuthConfigured ? (isAuthenticated ? 'success' : 'warning') : 'neutral'}
+                  size="sm"
+                >
+                  {isStackAuthConfigured ? (isAuthenticated ? 'Auth' : 'No Auth') : 'Demo'}
+                </StatusPill>
+              </div>
             </div>
             <div className="space-y-2">
-              <Label>Site</Label>
-              <Select value={selectedSite} onValueChange={setSelectedSite}>
+              <Label>Test Device</Label>
+              <Select value={selectedDevice} onValueChange={setSelectedDevice}>
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Select device" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="site-1">Main Store</SelectItem>
-                  <SelectItem value="site-2">Warehouse</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Unit</Label>
-              <Select value={selectedUnit} onValueChange={setSelectedUnit}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="unit-1">Freezer A</SelectItem>
-                  <SelectItem value="unit-2">Fridge B</SelectItem>
+                  <SelectItem value="all">All Active Devices ({activeDevices.length})</SelectItem>
+                  {activeDevices.map(device => (
+                    <SelectItem key={device.id} value={device.id}>
+                      {device.name} ({device.device_type})
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -196,12 +351,17 @@ export function TestingTab() {
           {/* Active Context Banner */}
           <div className="p-3 bg-primary/10 border border-primary/20 rounded-lg flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <StatusPill variant="success">Active</StatusPill>
+              <StatusPill variant={activeDevices.length > 0 ? 'success' : 'warning'}>
+                {activeDevices.length > 0 ? 'Ready' : 'No Active Devices'}
+              </StatusPill>
               <span className="text-sm text-foreground">
-                Testing as: <strong>FrostGuard Demo</strong> → Main Store → Freezer A
+                Testing as: <strong>{orgDisplayName}</strong>
+                {selectedDevice !== 'all' && (
+                  <> → {activeDevices.find(d => d.id === selectedDevice)?.name || 'Unknown'}</>
+                )}
               </span>
             </div>
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" onClick={handleResetContext}>
               <RefreshCw className="w-4 h-4 mr-1" />
               Reset Context
             </Button>
@@ -209,11 +369,13 @@ export function TestingTab() {
 
           {showDiagnostics && (
             <div className="mt-4 p-3 bg-muted/30 rounded-lg text-xs font-mono text-muted-foreground">
-              <p>Org ID: {selectedOrg}</p>
-              <p>Site ID: {selectedSite}</p>
-              <p>Unit ID: {selectedUnit}</p>
-              <p>TTN App: frostguard-demo</p>
-              <p>Webhook: Configured</p>
+              <p>Organization ID: {organizationId || 'default'}</p>
+              <p>Stack Auth Configured: {isStackAuthConfigured ? 'Yes' : 'No'}</p>
+              <p>Authenticated: {isAuthenticated ? 'Yes' : 'No'}</p>
+              <p>Selected Device: {selectedDevice}</p>
+              <p>Active Devices: {activeDeviceCount}</p>
+              <p>Total Readings Sent: {readingsCount}</p>
+              <p>Total Devices: {devices.length}</p>
             </div>
           )}
         </CardContent>
@@ -323,9 +485,13 @@ export function TestingTab() {
               <TestTube className="w-5 h-5 text-primary" />
               Test Results
             </CardTitle>
-            <Button onClick={handleRunTest} disabled={isRunning}>
-              <Play className="w-4 h-4 mr-1" />
-              Run Test
+            <Button onClick={handleRunTest} disabled={isRunning || activeDeviceCount === 0}>
+              {isRunning ? (
+                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+              ) : (
+                <Play className="w-4 h-4 mr-1" />
+              )}
+              {isRunning ? 'Running...' : 'Run Test'}
             </Button>
           </div>
         </CardHeader>

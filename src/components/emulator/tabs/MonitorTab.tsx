@@ -1,8 +1,12 @@
 /**
  * MonitorTab - Live telemetry monitoring dashboard
+ * Connected to real devices and telemetry data via API
+ *
+ * TODO: Implement historical data chart using actual database readings
+ * TODO: Add connection status indicator for API health
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   Activity,
   Thermometer,
@@ -19,6 +23,8 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Minus,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -26,6 +32,9 @@ import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { StatusPill } from '@/components/ui/status-pill'
 import { MetricCard, StatRow } from '@/components/ui/data-card'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { SetupWizard } from '@/components/ui/setup-wizard'
+import { QuickDeviceForm, ActivateDeviceForm, SetupErrorWizard } from '@/components/setup'
 import {
   Select,
   SelectContent,
@@ -44,6 +53,11 @@ import {
   LineChart,
   Line,
 } from 'recharts'
+import { useDevices } from '@/hooks/useDevices'
+import { useTelemetry } from '@/hooks/useTelemetry'
+import { useEmulation } from '@/hooks/useEmulation'
+import { parseSimulationParams, parseTelemetryPayload } from '@/lib/types'
+import type { Device, Telemetry, TelemetryPayload } from '@/lib/types'
 
 interface TelemetryPoint {
   time: string
@@ -55,7 +69,7 @@ interface TelemetryPoint {
 interface DeviceStatus {
   id: string
   name: string
-  type: 'temperature' | 'door'
+  type: 'temperature' | 'door' | 'humidity'
   status: 'online' | 'offline' | 'warning'
   lastSeen: Date
   battery: number
@@ -63,82 +77,125 @@ interface DeviceStatus {
   value: string
 }
 
-// Generate mock telemetry data
-const generateTelemetryHistory = (): TelemetryPoint[] => {
+// Transform real telemetry data to chart format
+const transformTelemetryToChartData = (telemetry: Telemetry[]): TelemetryPoint[] => {
+  // Sort by timestamp ascending (oldest first) for chart display
+  const sorted = [...telemetry].sort((a, b) => a.timestamp - b.timestamp)
+
+  return sorted.map(t => {
+    const payload = parseTelemetryPayload(t.payload)
+    return {
+      time: new Date(t.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      temperature: payload.temperature ?? 0,
+      humidity: payload.humidity ?? 0,
+      signal: t.rssi ?? -85,
+    }
+  })
+}
+
+// Generate mock telemetry data when no real data exists
+const generateMockTelemetryHistory = (baseTemp: number = 38, baseHumidity: number = 65): TelemetryPoint[] => {
   const data: TelemetryPoint[] = []
   const now = new Date()
   for (let i = 29; i >= 0; i--) {
     const time = new Date(now.getTime() - i * 60000)
     data.push({
       time: time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-      temperature: 35 + Math.random() * 10,
-      humidity: 55 + Math.random() * 20,
+      temperature: baseTemp + (Math.random() - 0.5) * 10,
+      humidity: baseHumidity + (Math.random() - 0.5) * 20,
       signal: -70 - Math.random() * 30,
     })
   }
   return data
 }
 
-const mockDevices: DeviceStatus[] = [
-  {
-    id: '1',
-    name: 'Freezer Temp Sensor 1',
-    type: 'temperature',
-    status: 'online',
-    lastSeen: new Date(),
-    battery: 85,
-    signal: -72,
-    value: '38.5°F',
-  },
-  {
-    id: '2',
-    name: 'Fridge Door Sensor',
-    type: 'door',
-    status: 'online',
-    lastSeen: new Date(),
-    battery: 92,
-    signal: -68,
-    value: 'Closed',
-  },
-  {
-    id: '3',
-    name: 'Walk-in Freezer',
-    type: 'temperature',
-    status: 'warning',
-    lastSeen: new Date(Date.now() - 300000),
-    battery: 15,
-    signal: -95,
-    value: '42.1°F',
-  },
-]
+// Parse refresh interval string to milliseconds
+const parseRefreshInterval = (interval: string): number => {
+  const value = parseInt(interval)
+  if (interval.endsWith('s')) return value * 1000
+  if (interval.endsWith('m')) return value * 60000
+  return 5000 // Default 5 seconds
+}
+
+// Convert Device to DeviceStatus for display
+const deviceToStatus = (device: Device): DeviceStatus => {
+  const params = parseSimulationParams(device.simulation_params)
+  const avgTemp = ((params.min_value || 35) + (params.max_value || 45)) / 2
+
+  return {
+    id: device.id,
+    name: device.name,
+    type: device.device_type as 'temperature' | 'door' | 'humidity',
+    status: device.status === 'active' ? 'online' : device.status === 'maintenance' ? 'warning' : 'offline',
+    lastSeen: new Date(device.updated_at || device.created_at),
+    battery: 85 + Math.floor(Math.random() * 15), // Simulated
+    signal: -70 - Math.floor(Math.random() * 30), // Simulated
+    value: device.device_type === 'door' ? 'Closed' : `${avgTemp.toFixed(1)}°F`,
+  }
+}
 
 export function MonitorTab() {
+  // Fetch real devices from API
+  const { devices, isLoading, isError, error, refetch } = useDevices()
+
+  // Get emulation status
+  const { status: emulatorStatus, readingsCount, activeDeviceCount } = useEmulation({})
+
   const [isPaused, setIsPaused] = useState(false)
   const [showLocalState, setShowLocalState] = useState(false)
   const [selectedDevice, setSelectedDevice] = useState('all')
   const [refreshInterval, setRefreshInterval] = useState('5s')
-  const [telemetryData, setTelemetryData] = useState<TelemetryPoint[]>(generateTelemetryHistory())
   const [lastUpdate, setLastUpdate] = useState(new Date())
 
-  // Simulated live data updates
+  // Determine which device to fetch telemetry for
+  const telemetryDeviceId = useMemo(() => {
+    if (selectedDevice === 'all') {
+      // For "all", use the first active device's telemetry
+      const activeDevice = devices.find(d => d.status === 'active')
+      return activeDevice?.id ?? null
+    }
+    return selectedDevice
+  }, [selectedDevice, devices])
+
+  // Fetch real telemetry data with polling
+  const {
+    telemetry: rawTelemetry,
+    isLoading: isTelemetryLoading,
+    isFetching: isTelemetryFetching,
+    refetch: refetchTelemetry,
+  } = useTelemetry(telemetryDeviceId, {
+    limit: 30, // Last 30 data points for chart
+    refetchInterval: isPaused ? false : parseRefreshInterval(refreshInterval),
+    enabled: !isPaused && !!telemetryDeviceId,
+  })
+
+  // Transform telemetry data for charts, fallback to mock if empty
+  const telemetryData = useMemo(() => {
+    if (rawTelemetry && rawTelemetry.length > 0) {
+      return transformTelemetryToChartData(rawTelemetry)
+    }
+    // Fallback to mock data if no real telemetry
+    return generateMockTelemetryHistory()
+  }, [rawTelemetry])
+
+  // Convert real devices to DeviceStatus format
+  const deviceStatuses = useMemo(() => {
+    return devices.map(deviceToStatus)
+  }, [devices])
+
+  // Update lastUpdate timestamp when new data arrives
   useEffect(() => {
-    if (isPaused) return
-
-    const interval = setInterval(() => {
-      setTelemetryData((prev) => {
-        const newPoint: TelemetryPoint = {
-          time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-          temperature: 35 + Math.random() * 10,
-          humidity: 55 + Math.random() * 20,
-          signal: -70 - Math.random() * 30,
-        }
-        return [...prev.slice(1), newPoint]
-      })
+    if (rawTelemetry && rawTelemetry.length > 0 && !isPaused) {
       setLastUpdate(new Date())
-    }, 5000)
+    }
+  }, [rawTelemetry, isPaused])
 
-    return () => clearInterval(interval)
-  }, [isPaused])
+  // Handle manual refresh
+  const handleRefresh = useCallback(() => {
+    refetch()
+    refetchTelemetry()
+    setLastUpdate(new Date())
+  }, [refetch, refetchTelemetry])
 
   const currentTemp = telemetryData[telemetryData.length - 1]?.temperature || 0
   const currentHumidity = telemetryData[telemetryData.length - 1]?.humidity || 0
@@ -151,6 +208,77 @@ export function MonitorTab() {
       return <ArrowDownRight className="w-4 h-4 text-blue-500" />
     }
     return <Minus className="w-4 h-4 text-muted-foreground" />
+  }
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
+          <p className="text-sm text-muted-foreground">Loading devices...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Error state - show troubleshooting wizard
+  if (isError) {
+    return (
+      <SetupErrorWizard
+        error={error}
+        onRetry={() => refetch()}
+        tabName="Monitor"
+      >
+        <div className="space-y-3">
+          <p className="text-sm font-medium">Or create a device once connected:</p>
+          <QuickDeviceForm onSuccess={() => refetch()} />
+        </div>
+      </SetupErrorWizard>
+    )
+  }
+
+  // No devices - show setup wizard
+  if (devices.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <SetupWizard
+          title="Get Started with Monitoring"
+          description="Create a device to start viewing live telemetry data"
+          steps={[
+            {
+              id: 'create-device',
+              title: 'Create a Device',
+              description: 'Add a sensor to monitor its readings',
+              content: <QuickDeviceForm onSuccess={() => refetch()} />,
+            },
+          ]}
+          onComplete={() => refetch()}
+        />
+      </div>
+    )
+  }
+
+  // Devices exist but none are provisioned (active)
+  const activeDevices = devices.filter(d => d.status === 'active')
+  if (activeDevices.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <SetupWizard
+          title="Provision Your Devices"
+          description="Your devices need to be provisioned to TTN before monitoring telemetry"
+          steps={[
+            {
+              id: 'activate-device',
+              title: 'Provision Devices',
+              description: 'Enable at least one device to connect to TTN',
+              content: <ActivateDeviceForm onSuccess={() => refetch()} />,
+            },
+          ]}
+          onComplete={() => refetch()}
+        />
+      </div>
+    )
   }
 
   return (
@@ -167,8 +295,8 @@ export function MonitorTab() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Devices</SelectItem>
-                {mockDevices.map((device) => (
+                <SelectItem value="all">All Devices ({devices.length})</SelectItem>
+                {deviceStatuses.map((device) => (
                   <SelectItem key={device.id} value={device.id}>
                     {device.name}
                   </SelectItem>
@@ -221,8 +349,8 @@ export function MonitorTab() {
               </>
             )}
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setLastUpdate(new Date())}>
-            <RefreshCw className="w-4 h-4 mr-1" />
+          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isTelemetryFetching}>
+            <RefreshCw className={`w-4 h-4 mr-1 ${isTelemetryFetching ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
         </div>
@@ -248,7 +376,11 @@ export function MonitorTab() {
                 <div className="flex items-center gap-4 text-sm text-muted-foreground">
                   <span>Last update: {lastUpdate.toLocaleTimeString()}</span>
                   <span>•</span>
-                  <span>30 points</span>
+                  <span>{telemetryData.length} points</span>
+                  <span>•</span>
+                  <StatusPill variant={rawTelemetry && rawTelemetry.length > 0 ? 'info' : 'warning'} size="sm">
+                    {rawTelemetry && rawTelemetry.length > 0 ? 'Live Data' : 'Demo Data'}
+                  </StatusPill>
                 </div>
               </div>
             </CardContent>
@@ -387,8 +519,24 @@ export function MonitorTab() {
               </CardTitle>
             </CardHeader>
             <CardContent>
+              {isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : isError ? (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Failed to load devices: {error?.message}
+                  </AlertDescription>
+                </Alert>
+              ) : deviceStatuses.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No devices configured. Add devices in the Devices tab.
+                </div>
+              ) : (
               <div className="space-y-3">
-                {mockDevices.map((device) => (
+                {deviceStatuses.map((device) => (
                   <div
                     key={device.id}
                     className="flex items-center justify-between p-3 bg-muted/30 rounded-lg"
@@ -458,6 +606,7 @@ export function MonitorTab() {
                   </div>
                 ))}
               </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -476,13 +625,15 @@ export function MonitorTab() {
                 <StatRow
                   label="Emulator Status"
                   value={
-                    <StatusPill variant="success">Running</StatusPill>
+                    <StatusPill variant={emulatorStatus === 'running' ? 'success' : emulatorStatus === 'error' ? 'error' : 'neutral'}>
+                      {emulatorStatus === 'running' ? 'Running' : emulatorStatus === 'error' ? 'Error' : 'Stopped'}
+                    </StatusPill>
                   }
                 />
-                <StatRow label="Active Devices" value="3" />
-                <StatRow label="Messages Sent" value="1,247" />
+                <StatRow label="Active Devices" value={activeDeviceCount.toString()} />
+                <StatRow label="Messages Sent" value={readingsCount.toLocaleString()} />
                 <StatRow label="Last Uplink" value={new Date().toLocaleTimeString()} />
-                <StatRow label="Uptime" value="4h 23m" />
+                <StatRow label="Total Devices" value={devices.length.toString()} />
               </CardContent>
             </Card>
 
