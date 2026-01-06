@@ -39,7 +39,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 }
 
 /**
- * Generic API request helper
+ * Generic API request helper with timeout
  */
 async function apiRequest<T>(
   endpoint: string,
@@ -47,29 +47,57 @@ async function apiRequest<T>(
     method?: string
     headers?: Record<string, string>
     body?: string
+    timeout?: number
   } = {}
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`
-  const authHeaders = await getAuthHeaders()
+  const timeout = options.timeout ?? 10000 // 10 second default timeout
 
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...authHeaders,
-      ...options.headers,
-    },
-  })
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({
-      error: 'Unknown error',
-      message: response.statusText,
-    }))
-    throw new Error(error.message || error.error || 'API request failed')
+  // Get auth headers with a timeout to prevent hanging
+  let authHeaders: Record<string, string> = {}
+  try {
+    const authPromise = getAuthHeaders()
+    const timeoutPromise = new Promise<Record<string, string>>((_, reject) =>
+      setTimeout(() => reject(new Error('Auth timeout')), 5000)
+    )
+    authHeaders = await Promise.race([authPromise, timeoutPromise])
+  } catch (error) {
+    console.warn('Auth headers unavailable, proceeding without auth:', error)
   }
 
-  return response.json()
+  // Create abort controller for request timeout
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeout)
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders,
+        ...options.headers,
+      },
+    })
+
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({
+        error: 'Unknown error',
+        message: response.statusText,
+      }))
+      throw new Error(error.message || error.error || 'API request failed')
+    }
+
+    return response.json()
+  } catch (error) {
+    clearTimeout(timeoutId)
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('Request timeout - API server may be unavailable')
+    }
+    throw error
+  }
 }
 
 /**

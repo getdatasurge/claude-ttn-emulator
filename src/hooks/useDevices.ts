@@ -20,6 +20,8 @@ export function useDevices() {
     queryFn: getDevices,
     staleTime: 30000, // Consider data fresh for 30 seconds
     refetchOnWindowFocus: true,
+    retry: 2, // Only retry twice to avoid infinite loading
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
   })
 
   // Create device mutation
