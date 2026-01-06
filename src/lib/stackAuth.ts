@@ -90,6 +90,34 @@ export const stackClientApp = {
     } catch {
       return null
     }
+  },
+
+  async signInWithCredential(credentials: { email: string; password: string }) {
+    const app = await getStackClientAppAsync()
+    if (!app) {
+      return { status: 'error', error: { message: 'Stack Auth not initialized' } }
+    }
+    try {
+      return await app.signInWithCredential(credentials)
+    } catch (err) {
+      return {
+        status: 'error',
+        error: { message: err instanceof Error ? err.message : 'Sign in failed' }
+      }
+    }
+  },
+
+  async signOut() {
+    const app = await getStackClientAppAsync()
+    if (!app) return
+    try {
+      const user = await app.getUser()
+      if (user?.signOut) {
+        await user.signOut()
+      }
+    } catch (err) {
+      console.error('Sign out failed:', err)
+    }
   }
 }
 
