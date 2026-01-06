@@ -1,8 +1,13 @@
 /**
  * SensorsTab - Sensor configuration and test scenarios
+ * Connected to device simulation parameters via API
+ *
+ * TODO: Add multi-select for bulk device parameter editing
+ * TODO: Add sensor configuration presets (freezer, fridge, etc.)
+ * TODO: Add parameter validation with visual feedback
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Thermometer,
   Droplets,
@@ -11,6 +16,8 @@ import {
   ThermometerSun,
   Battery,
   Wifi,
+  Save,
+  Loader2,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -18,6 +25,7 @@ import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   Select,
   SelectContent,
@@ -26,13 +34,20 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { StatusPill } from '@/components/ui/status-pill'
+import { SetupWizard } from '@/components/ui/setup-wizard'
+import { QuickDeviceForm, ActivateDeviceForm, SetupErrorWizard } from '@/components/setup'
+import { useDevices } from '@/hooks/useDevices'
+import { useToast } from '@/hooks/use-toast'
+import { parseSimulationParams, stringifySimulationParams } from '@/lib/types'
+import type { Device, DeviceSimulationParams } from '@/lib/types'
 
 interface SensorConfig {
   tempMin: number
   tempMax: number
   humidity: number
-  readingInterval: string
+  readingInterval: number
   doorState: 'open' | 'closed'
+  doorStatusInterval: number
   doorEnabled: boolean
   tempEnabled: boolean
 }
@@ -41,8 +56,9 @@ const defaultConfig: SensorConfig = {
   tempMin: 35,
   tempMax: 45,
   humidity: 65,
-  readingInterval: '5m',
+  readingInterval: 30,
   doorState: 'closed',
+  doorStatusInterval: 30,
   doorEnabled: true,
   tempEnabled: true,
 }
@@ -99,7 +115,41 @@ const testScenarios = [
 ]
 
 export function SensorsTab() {
+  const { toast } = useToast()
+  const {
+    devices,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    updateDevice,
+    isUpdating,
+  } = useDevices()
+
   const [config, setConfig] = useState<SensorConfig>(defaultConfig)
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | 'all'>('all')
+  const [hasChanges, setHasChanges] = useState(false)
+
+  // Get temperature and door devices
+  const temperatureDevices = devices.filter(d => d.device_type === 'temperature' || d.device_type === 'humidity')
+  const doorDevices = devices.filter(d => d.device_type === 'door')
+
+  // Load config from selected device
+  useEffect(() => {
+    if (selectedDeviceId !== 'all' && devices.length > 0) {
+      const device = devices.find(d => d.id === selectedDeviceId)
+      if (device) {
+        const params = parseSimulationParams(device.simulation_params)
+        setConfig(prev => ({
+          ...prev,
+          tempMin: params.min_value ?? prev.tempMin,
+          tempMax: params.max_value ?? prev.tempMax,
+          readingInterval: params.interval ?? prev.readingInterval,
+        }))
+        setHasChanges(false)
+      }
+    }
+  }, [selectedDeviceId, devices])
 
   const handleTempRangeChange = (values: number[]) => {
     setConfig((prev) => ({
@@ -107,6 +157,7 @@ export function SensorsTab() {
       tempMin: values[0],
       tempMax: values[1],
     }))
+    setHasChanges(true)
   }
 
   const handleHumidityChange = (values: number[]) => {
@@ -114,6 +165,7 @@ export function SensorsTab() {
       ...prev,
       humidity: values[0],
     }))
+    setHasChanges(true)
   }
 
   const applyScenario = (scenario: typeof testScenarios[0]) => {
@@ -121,10 +173,196 @@ export function SensorsTab() {
       ...prev,
       ...scenario.config,
     }))
+    setHasChanges(true)
+    toast({
+      title: 'Scenario applied',
+      description: `${scenario.name} settings loaded. Click "Save to Device(s)" to persist.`,
+    })
+  }
+
+  const saveToDevices = async () => {
+    const params: DeviceSimulationParams = {
+      interval: config.readingInterval,
+      min_value: config.tempMin,
+      max_value: config.tempMax,
+    }
+
+    const devicesToUpdate = selectedDeviceId === 'all'
+      ? temperatureDevices.filter(d => d.status === 'active')
+      : devices.filter(d => d.id === selectedDeviceId)
+
+    if (devicesToUpdate.length === 0) {
+      toast({
+        title: 'No devices to update',
+        description: 'Select a device or ensure you have active devices.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    let successCount = 0
+    for (const device of devicesToUpdate) {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          updateDevice(
+            {
+              id: device.id,
+              updates: {
+                simulation_params: stringifySimulationParams(params),
+              },
+            },
+            {
+              onSuccess: () => {
+                successCount++
+                resolve()
+              },
+              onError: (err: Error) => reject(err),
+            }
+          )
+        })
+      } catch {
+        // Continue with other devices
+      }
+    }
+
+    if (successCount > 0) {
+      toast({
+        title: 'Settings saved',
+        description: `Updated ${successCount} device(s) with new simulation parameters.`,
+      })
+      setHasChanges(false)
+    } else {
+      toast({
+        title: 'Failed to save',
+        description: 'Could not update any devices.',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
+          <p className="text-sm text-muted-foreground">Loading devices...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Error state - show troubleshooting wizard
+  if (isError) {
+    return (
+      <SetupErrorWizard
+        error={error}
+        onRetry={() => refetch()}
+        tabName="Sensors"
+      >
+        <div className="space-y-3">
+          <p className="text-sm font-medium">Or create a device once connected:</p>
+          <QuickDeviceForm onSuccess={() => refetch()} />
+        </div>
+      </SetupErrorWizard>
+    )
+  }
+
+  // No devices - show setup wizard
+  if (devices.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <SetupWizard
+          title="Get Started with Sensors"
+          description="Create a device to start configuring sensor parameters"
+          steps={[
+            {
+              id: 'create-device',
+              title: 'Create a Device',
+              description: 'Add a temperature, humidity, or door sensor',
+              content: <QuickDeviceForm onSuccess={() => refetch()} />,
+            },
+          ]}
+          onComplete={() => refetch()}
+        />
+      </div>
+    )
+  }
+
+  // Devices exist but none are provisioned (active)
+  const activeDevices = devices.filter(d => d.status === 'active')
+  if (activeDevices.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <SetupWizard
+          title="Provision Your Devices"
+          description="Your devices need to be provisioned to TTN before configuring sensor parameters"
+          steps={[
+            {
+              id: 'activate-device',
+              title: 'Provision Devices',
+              description: 'Enable at least one device to connect to TTN',
+              content: <ActivateDeviceForm onSuccess={() => refetch()} />,
+            },
+          ]}
+          onComplete={() => refetch()}
+        />
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
+      {/* Device Selection & Actions */}
+      <Card className="dashboard-card">
+        <CardContent className="pt-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="space-y-1">
+                <Label>Target Device(s)</Label>
+                <Select
+                  value={selectedDeviceId}
+                  onValueChange={(value) => setSelectedDeviceId(value as string | 'all')}
+                >
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="Select device" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Active Devices ({temperatureDevices.filter(d => d.status === 'active').length})</SelectItem>
+                    {temperatureDevices.map(device => (
+                      <SelectItem key={device.id} value={device.id}>
+                        {device.name} ({device.status})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {hasChanges && (
+                <StatusPill variant="warning" size="sm">
+                  Unsaved changes
+                </StatusPill>
+              )}
+            </div>
+            <Button
+              onClick={saveToDevices}
+              disabled={isUpdating || !hasChanges}
+            >
+              {isUpdating ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  Save to Device(s)
+                </>
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Sensor Configuration Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Temperature Sensor Card */}
@@ -169,12 +407,13 @@ export function SensorsTab() {
                   <Input
                     type="number"
                     value={config.tempMin}
-                    onChange={(e) =>
+                    onChange={(e) => {
                       setConfig((prev) => ({
                         ...prev,
                         tempMin: parseInt(e.target.value) || 0,
                       }))
-                    }
+                      setHasChanges(true)
+                    }}
                     disabled={!config.tempEnabled}
                     className="h-8"
                   />
@@ -184,12 +423,13 @@ export function SensorsTab() {
                   <Input
                     type="number"
                     value={config.tempMax}
-                    onChange={(e) =>
+                    onChange={(e) => {
                       setConfig((prev) => ({
                         ...prev,
                         tempMax: parseInt(e.target.value) || 0,
                       }))
-                    }
+                      setHasChanges(true)
+                    }}
                     disabled={!config.tempEnabled}
                     className="h-8"
                   />
@@ -220,23 +460,25 @@ export function SensorsTab() {
 
             {/* Reading Interval */}
             <div className="space-y-2">
-              <Label>Reading Interval</Label>
+              <Label>Reading Interval (seconds)</Label>
               <Select
-                value={config.readingInterval}
-                onValueChange={(value) =>
-                  setConfig((prev) => ({ ...prev, readingInterval: value }))
-                }
+                value={config.readingInterval.toString()}
+                onValueChange={(value) => {
+                  setConfig((prev) => ({ ...prev, readingInterval: parseInt(value) }))
+                  setHasChanges(true)
+                }}
                 disabled={!config.tempEnabled}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="1m">Every 1 minute</SelectItem>
-                  <SelectItem value="5m">Every 5 minutes</SelectItem>
-                  <SelectItem value="15m">Every 15 minutes</SelectItem>
-                  <SelectItem value="30m">Every 30 minutes</SelectItem>
-                  <SelectItem value="1h">Every hour</SelectItem>
+                  <SelectItem value="10">Every 10 seconds</SelectItem>
+                  <SelectItem value="30">Every 30 seconds</SelectItem>
+                  <SelectItem value="60">Every 1 minute</SelectItem>
+                  <SelectItem value="300">Every 5 minutes</SelectItem>
+                  <SelectItem value="900">Every 15 minutes</SelectItem>
+                  <SelectItem value="1800">Every 30 minutes</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -307,12 +549,13 @@ export function SensorsTab() {
             <Button
               variant={config.doorState === 'closed' ? 'outline' : 'default'}
               className="w-full"
-              onClick={() =>
+              onClick={() => {
                 setConfig((prev) => ({
                   ...prev,
                   doorState: prev.doorState === 'closed' ? 'open' : 'closed',
                 }))
-              }
+                setHasChanges(true)
+              }}
               disabled={!config.doorEnabled}
             >
               {config.doorState === 'closed' ? 'Open Door' : 'Close Door'}
@@ -320,16 +563,23 @@ export function SensorsTab() {
 
             {/* Status Interval */}
             <div className="space-y-2">
-              <Label>Status Interval</Label>
-              <Select defaultValue="30s" disabled={!config.doorEnabled}>
+              <Label>Status Interval (seconds)</Label>
+              <Select
+                value={config.doorStatusInterval.toString()}
+                onValueChange={(value) => {
+                  setConfig((prev) => ({ ...prev, doorStatusInterval: parseInt(value) }))
+                  setHasChanges(true)
+                }}
+                disabled={!config.doorEnabled}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="10s">Every 10 seconds</SelectItem>
-                  <SelectItem value="30s">Every 30 seconds</SelectItem>
-                  <SelectItem value="1m">Every 1 minute</SelectItem>
-                  <SelectItem value="5m">Every 5 minutes</SelectItem>
+                  <SelectItem value="10">Every 10 seconds</SelectItem>
+                  <SelectItem value="30">Every 30 seconds</SelectItem>
+                  <SelectItem value="60">Every 1 minute</SelectItem>
+                  <SelectItem value="300">Every 5 minutes</SelectItem>
                 </SelectContent>
               </Select>
             </div>

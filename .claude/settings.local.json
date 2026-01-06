@@ -54,7 +54,12 @@
       "Bash(npm run type-check:*)",
       "Bash(npm ls:*)",
       "Bash(git config:*)",
-      "Bash(npm test:*)"
+      "Bash(npm test:*)",
+      "Bash(timeout 2 cat:*)",
+      "Bash(grep:*)",
+      "Bash(gh repo view:*)",
+      "Bash(gh label list:*)",
+      "Bash(gh issue close:*)"
     ]
   }
 }

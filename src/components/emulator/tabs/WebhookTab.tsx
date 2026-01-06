@@ -1,18 +1,21 @@
 /**
  * WebhookTab - TTN integration and webhook configuration
+ * Connected to the actual API for TTN settings management
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Webhook,
   Globe,
-  Shield,
   CheckCircle2,
   XCircle,
   AlertTriangle,
   ExternalLink,
   Eye,
   EyeOff,
+  Loader2,
+  RefreshCw,
+  AlertCircle,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -21,6 +24,8 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { IdentifierDisplay } from '@/components/ui/copy-button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { SetupWizard } from '@/components/ui/setup-wizard'
+import { QuickTTNForm, SetupErrorWizard } from '@/components/setup'
 import {
   Select,
   SelectContent,
@@ -28,6 +33,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { getTTNSettings, saveTTNSettings, testTTNConnection } from '@/lib/api'
+import { useToast } from '@/hooks/use-toast'
+import type { TTNSettingsInsert } from '@/lib/types'
 
 interface TTNConfig {
   routeThroughTTN: boolean
@@ -35,54 +44,138 @@ interface TTNConfig {
   cluster: string
   applicationId: string
   apiKey: string
-  webhookSecret: string
-  gatewayOwner: string
-  ttnUsername: string
-  gatewayApiKey: string
+  webhookUrl: string
 }
 
-const defaultConfig: TTNConfig = {
-  routeThroughTTN: true,
-  ttnHost: 'nam1.cloud.thethings.network',
-  cluster: 'nam1',
-  applicationId: '',
-  apiKey: '',
-  webhookSecret: '',
-  gatewayOwner: '',
-  ttnUsername: '',
-  gatewayApiKey: '',
+const CLUSTER_TO_HOST: Record<string, string> = {
+  nam1: 'nam1.cloud.thethings.network',
+  eu1: 'eu1.cloud.thethings.network',
+  au1: 'au1.cloud.thethings.network',
 }
 
 type ValidationStatus = 'idle' | 'validating' | 'valid' | 'invalid'
 
 export function WebhookTab() {
-  const [config, setConfig] = useState<TTNConfig>(defaultConfig)
+  const { toast } = useToast()
+  const queryClient = useQueryClient()
+
+  // Fetch existing TTN settings
+  const {
+    data: savedSettings,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['ttn-settings'],
+    queryFn: getTTNSettings,
+  })
+
+  // Local form state
+  const [config, setConfig] = useState<TTNConfig>({
+    routeThroughTTN: true,
+    ttnHost: 'nam1.cloud.thethings.network',
+    cluster: 'nam1',
+    applicationId: '',
+    apiKey: '',
+    webhookUrl: '',
+  })
   const [showApiKey, setShowApiKey] = useState(false)
-  const [showWebhookSecret, setShowWebhookSecret] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<ValidationStatus>('idle')
-  const [permissionStatus, setPermissionStatus] = useState<ValidationStatus>('idle')
-  const [isSaving, setIsSaving] = useState(false)
+  const [connectionDetails, setConnectionDetails] = useState<string | null>(null)
+
+  // Update local state when saved settings load
+  useEffect(() => {
+    if (savedSettings) {
+      const region = savedSettings.region || 'nam1'
+      setConfig({
+        routeThroughTTN: true,
+        ttnHost: CLUSTER_TO_HOST[region] || 'nam1.cloud.thethings.network',
+        cluster: region,
+        applicationId: savedSettings.app_id || '',
+        apiKey: savedSettings.api_key || '',
+        webhookUrl: savedSettings.webhook_url || '',
+      })
+    }
+  }, [savedSettings])
 
   const webhookUrl = `${window.location.origin}/api/webhook/ttn`
 
+  // Save settings mutation
+  const saveMutation = useMutation({
+    mutationFn: (settings: TTNSettingsInsert) => saveTTNSettings(settings),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ttn-settings'] })
+      toast({
+        title: 'Settings saved',
+        description: 'TTN configuration has been saved successfully.',
+      })
+    },
+    onError: (err: Error) => {
+      toast({
+        title: 'Failed to save settings',
+        description: err.message,
+        variant: 'destructive',
+      })
+    },
+  })
+
+  // Test connection mutation
+  const testMutation = useMutation({
+    mutationFn: () =>
+      testTTNConnection({
+        app_id: config.applicationId,
+        api_key: config.apiKey,
+        region: config.cluster,
+      }),
+    onSuccess: (result) => {
+      if (result.success) {
+        setConnectionStatus('valid')
+        setConnectionDetails(
+          result.application
+            ? `Connected to "${result.application.name}"`
+            : 'Connection successful'
+        )
+        toast({
+          title: 'Connection successful',
+          description: `Successfully connected to TTN application.`,
+        })
+      } else {
+        setConnectionStatus('invalid')
+        setConnectionDetails(result.error || 'Connection failed')
+        toast({
+          title: 'Connection failed',
+          description: result.error || 'Could not connect to TTN.',
+          variant: 'destructive',
+        })
+      }
+    },
+    onError: (err: Error) => {
+      setConnectionStatus('invalid')
+      setConnectionDetails(err.message)
+      toast({
+        title: 'Connection test failed',
+        description: err.message,
+        variant: 'destructive',
+      })
+    },
+  })
+
   const handleTestConnection = async () => {
     setConnectionStatus('validating')
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    setConnectionStatus(config.applicationId && config.apiKey ? 'valid' : 'invalid')
+    setConnectionDetails(null)
+    testMutation.mutate()
   }
 
-  const handleCheckPermissions = async () => {
-    setPermissionStatus('validating')
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    setPermissionStatus(config.apiKey ? 'valid' : 'invalid')
-  }
-
-  const handleSave = async () => {
-    setIsSaving(true)
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    setIsSaving(false)
+  const handleSave = () => {
+    const settings: TTNSettingsInsert = {
+      organization_id: '', // Will be set by API from JWT
+      app_id: config.applicationId,
+      api_key: config.apiKey,
+      webhook_url: webhookUrl,
+      region: config.cluster,
+    }
+    saveMutation.mutate(settings)
   }
 
   const ValidationIcon = ({ status }: { status: ValidationStatus }) => {
@@ -98,6 +191,55 @@ export function WebhookTab() {
       default:
         return null
     }
+  }
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
+          <p className="text-sm text-muted-foreground">Loading TTN settings...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Error state - show troubleshooting wizard
+  if (isError) {
+    return (
+      <SetupErrorWizard
+        error={error}
+        onRetry={() => refetch()}
+        tabName="Webhook"
+      >
+        <div className="space-y-3">
+          <p className="text-sm font-medium">Or configure TTN settings once connected:</p>
+          <QuickTTNForm onSuccess={() => refetch()} />
+        </div>
+      </SetupErrorWizard>
+    )
+  }
+
+  // No TTN settings configured - show setup wizard
+  if (!savedSettings || !savedSettings.app_id) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <SetupWizard
+          title="Configure TTN Integration"
+          description="Connect to The Things Network to send and receive LoRaWAN messages"
+          steps={[
+            {
+              id: 'configure-ttn',
+              title: 'Enter TTN Credentials',
+              description: 'Your TTN Application ID and API Key',
+              content: <QuickTTNForm onSuccess={() => refetch()} />,
+            },
+          ]}
+          onComplete={() => refetch()}
+        />
+      </div>
+    )
   }
 
   return (
@@ -212,81 +354,6 @@ export function WebhookTab() {
             </p>
           </div>
 
-          {/* Webhook Secret */}
-          <div className="space-y-2">
-            <Label htmlFor="webhook-secret">Webhook Secret (Optional)</Label>
-            <div className="relative">
-              <Input
-                id="webhook-secret"
-                type={showWebhookSecret ? 'text' : 'password'}
-                value={config.webhookSecret}
-                onChange={(e) =>
-                  setConfig({ ...config, webhookSecret: e.target.value })
-                }
-                placeholder="Optional secret for webhook verification"
-                className="pr-10"
-              />
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute right-0 top-0 h-full"
-                onClick={() => setShowWebhookSecret(!showWebhookSecret)}
-              >
-                {showWebhookSecret ? (
-                  <EyeOff className="w-4 h-4" />
-                ) : (
-                  <Eye className="w-4 h-4" />
-                )}
-              </Button>
-            </div>
-          </div>
-
-          {/* Gateway Configuration */}
-          <div className="pt-4 border-t border-border">
-            <h4 className="text-sm font-medium text-foreground mb-4">
-              Gateway Configuration
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label>Gateway Owner</Label>
-                <Select
-                  value={config.gatewayOwner}
-                  onValueChange={(value) =>
-                    setConfig({ ...config, gatewayOwner: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select owner" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="self">Self (Personal)</SelectItem>
-                    <SelectItem value="org">Organization</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>TTN Username</Label>
-                <Input
-                  value={config.ttnUsername}
-                  onChange={(e) =>
-                    setConfig({ ...config, ttnUsername: e.target.value })
-                  }
-                  placeholder="your-username"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Gateway API Key</Label>
-                <Input
-                  type="password"
-                  value={config.gatewayApiKey}
-                  onChange={(e) =>
-                    setConfig({ ...config, gatewayApiKey: e.target.value })
-                  }
-                  placeholder="Gateway-specific key"
-                />
-              </div>
-            </div>
-          </div>
 
           {/* Validation Messages */}
           {!config.applicationId && (
@@ -298,31 +365,46 @@ export function WebhookTab() {
             </Alert>
           )}
 
+          {/* Connection Result */}
+          {connectionStatus === 'valid' && connectionDetails && (
+            <Alert>
+              <CheckCircle2 className="w-4 h-4 text-primary" />
+              <AlertDescription>{connectionDetails}</AlertDescription>
+            </Alert>
+          )}
+          {connectionStatus === 'invalid' && connectionDetails && (
+            <Alert variant="destructive">
+              <XCircle className="w-4 h-4" />
+              <AlertDescription>{connectionDetails}</AlertDescription>
+            </Alert>
+          )}
+
           {/* Actions */}
           <div className="flex items-center gap-3 pt-4">
             <Button
               variant="outline"
               onClick={handleTestConnection}
-              disabled={!config.applicationId || !config.apiKey}
+              disabled={!config.applicationId || !config.apiKey || testMutation.isPending}
             >
-              <ValidationIcon status={connectionStatus} />
+              {testMutation.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <ValidationIcon status={connectionStatus} />
+              )}
               <span className="ml-2">Test Connection</span>
             </Button>
             <Button
-              variant="outline"
-              onClick={handleCheckPermissions}
-              disabled={!config.apiKey}
+              onClick={handleSave}
+              disabled={saveMutation.isPending || !config.applicationId || !config.apiKey}
             >
-              <Shield className="w-4 h-4 mr-2" />
-              Check Permissions
-              {permissionStatus !== 'idle' && (
-                <span className="ml-2">
-                  <ValidationIcon status={permissionStatus} />
-                </span>
+              {saveMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Save Settings'
               )}
-            </Button>
-            <Button onClick={handleSave} disabled={isSaving}>
-              {isSaving ? 'Saving...' : 'Save Settings'}
             </Button>
           </div>
         </CardContent>

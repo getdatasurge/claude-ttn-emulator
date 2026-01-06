@@ -29,8 +29,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { isStackAuthConfigured } from '@/lib/stackAuth'
 import { useEmulation } from '@/hooks/useEmulation'
+import { useQueryClient } from '@tanstack/react-query'
+import { useToast } from '@/hooks/use-toast'
 
 // Tab components
 import { SensorsTab } from './tabs/SensorsTab'
@@ -43,9 +54,19 @@ import { LogsTab } from './tabs/LogsTab'
 import { UserProfile } from '@/components/UserProfile'
 
 export function EmulatorApp() {
+  const { toast } = useToast()
+  const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState('sensors')
   const [selectedOrg, setSelectedOrg] = useState('default')
   const [isSendingSingle, setIsSendingSingle] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [settings, setSettings] = useState({
+    autoRefresh: true,
+    darkMode: true,
+    showNotifications: true,
+    defaultInterval: 30,
+  })
 
   // Use the emulation hook for all emulation logic
   const {
@@ -55,7 +76,7 @@ export function EmulatorApp() {
     startEmulation,
     stopEmulation,
     sendSingleReading,
-  } = useEmulation({ defaultInterval: 30000 })
+  } = useEmulation({ defaultInterval: settings.defaultInterval * 1000 })
 
   const handleStartEmulation = () => {
     startEmulation()
@@ -69,6 +90,28 @@ export function EmulatorApp() {
     setIsSendingSingle(true)
     await sendSingleReading()
     setIsSendingSingle(false)
+  }
+
+  const handleRefreshAll = async () => {
+    setIsRefreshing(true)
+    try {
+      // Invalidate all queries to refetch data
+      await queryClient.invalidateQueries({ queryKey: ['devices'] })
+      await queryClient.invalidateQueries({ queryKey: ['gateways'] })
+      await queryClient.invalidateQueries({ queryKey: ['ttn-settings'] })
+      toast({
+        title: 'Data refreshed',
+        description: 'All data has been refreshed from the server.',
+      })
+    } catch {
+      toast({
+        title: 'Refresh failed',
+        description: 'Failed to refresh data. Please try again.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsRefreshing(false)
+    }
   }
 
   return (
@@ -154,10 +197,23 @@ export function EmulatorApp() {
                 {isSendingSingle && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
                 Single Reading
               </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <RefreshCw className="w-4 h-4" />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={handleRefreshAll}
+                disabled={isRefreshing}
+                title="Refresh all data"
+              >
+                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
               </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setIsSettingsOpen(true)}
+                title="Settings"
+              >
                 <Settings className="w-4 h-4" />
               </Button>
               {isStackAuthConfigured ? (
@@ -226,11 +282,90 @@ export function EmulatorApp() {
           <TabsContent value="monitor">
             <MonitorTab />
           </TabsContent>
-          <TabsContent value="logs">
+          <TabsContent value="logs" forceMount className="data-[state=inactive]:hidden">
             <LogsTab />
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Settings Dialog */}
+      <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings className="w-5 h-5" />
+              Emulator Settings
+            </DialogTitle>
+            <DialogDescription>
+              Configure emulator behavior and preferences
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6 py-4">
+            {/* Auto Refresh */}
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="auto-refresh">Auto Refresh</Label>
+                <p className="text-xs text-muted-foreground">
+                  Automatically refresh data periodically
+                </p>
+              </div>
+              <Switch
+                id="auto-refresh"
+                checked={settings.autoRefresh}
+                onCheckedChange={(checked) =>
+                  setSettings({ ...settings, autoRefresh: checked })
+                }
+              />
+            </div>
+
+            {/* Show Notifications */}
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="notifications">Notifications</Label>
+                <p className="text-xs text-muted-foreground">
+                  Show toast notifications for events
+                </p>
+              </div>
+              <Switch
+                id="notifications"
+                checked={settings.showNotifications}
+                onCheckedChange={(checked) =>
+                  setSettings({ ...settings, showNotifications: checked })
+                }
+              />
+            </div>
+
+            {/* Default Interval */}
+            <div className="space-y-2">
+              <Label htmlFor="interval">Emulation Interval</Label>
+              <Select
+                value={settings.defaultInterval.toString()}
+                onValueChange={(value) =>
+                  setSettings({ ...settings, defaultInterval: parseInt(value) })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10 seconds</SelectItem>
+                  <SelectItem value="30">30 seconds</SelectItem>
+                  <SelectItem value="60">1 minute</SelectItem>
+                  <SelectItem value="300">5 minutes</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                How often to send telemetry during emulation
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={() => setIsSettingsOpen(false)}>
+              Done
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

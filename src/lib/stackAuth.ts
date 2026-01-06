@@ -26,23 +26,75 @@ export type StackUser = {
   signOut?: () => Promise<void>
 }
 
-// Only export stackClientApp and useUser when configured
-export let stackClientApp: any = null
-export let useUser: () => StackUser | null = () => null
+// Track initialization state
+let _stackClientApp: any = null
+let _initPromise: Promise<void> | null = null
+let _isInitialized = false
 
-// Dynamically import Stack Auth only if configured
-if (isStackAuthConfigured) {
-  import('@stackframe/react').then(({ StackClientApp, useUser: stackUseUser }) => {
-    stackClientApp = new StackClientApp({
-      projectId,
-      publishableClientKey: publishableKey,
-      tokenStore: 'cookie',
-    })
-    useUser = stackUseUser
-  }).catch((err) => {
-    console.warn('Failed to load Stack Auth:', err)
-  })
+/**
+ * Initialize Stack Auth client (called once, cached)
+ */
+async function initStackAuth(): Promise<void> {
+  if (_isInitialized) return
+  if (_initPromise) return _initPromise
+
+  if (!isStackAuthConfigured) {
+    _isInitialized = true
+    return
+  }
+
+  _initPromise = (async () => {
+    try {
+      const { StackClientApp } = await import('@stackframe/react')
+      _stackClientApp = new StackClientApp({
+        projectId,
+        publishableClientKey: publishableKey,
+        tokenStore: 'cookie',
+      })
+      _isInitialized = true
+    } catch (err) {
+      console.warn('Failed to load Stack Auth:', err)
+      _isInitialized = true
+    }
+  })()
+
+  return _initPromise
 }
+
+// Start initialization immediately
+initStackAuth()
+
+/**
+ * Get the Stack Auth client app (may be null if not configured)
+ * Safe to call - returns null if not ready
+ */
+export function getStackClientApp(): any {
+  return _stackClientApp
+}
+
+/**
+ * Get Stack Auth client with initialization wait
+ */
+export async function getStackClientAppAsync(): Promise<any> {
+  await initStackAuth()
+  return _stackClientApp
+}
+
+// Legacy export for backwards compatibility (may be null during init)
+export const stackClientApp = {
+  async getUser() {
+    const app = await getStackClientAppAsync()
+    if (!app) return null
+    try {
+      return await app.getUser()
+    } catch {
+      return null
+    }
+  }
+}
+
+// Placeholder useUser - returns null when not in React context
+export const useUser = (): StackUser | null => null
 
 /**
  * Get current authenticated user

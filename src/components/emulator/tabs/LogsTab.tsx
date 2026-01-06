@@ -1,5 +1,7 @@
 /**
  * LogsTab - Live log feed and debugging
+ * Connected to emulation system for real readings
+ * Uses global logsStore for persistence across tab switches
  */
 
 import { useState, useEffect, useRef } from 'react'
@@ -19,6 +21,7 @@ import {
   CheckCircle2,
   Radio,
   Zap,
+  Loader2,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -40,47 +43,29 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { useEmulation } from '@/hooks/useEmulation'
+import { useToast } from '@/hooks/use-toast'
+import { useLogs, LogEntry } from '@/hooks/useLogs'
 
 type LogLevel = 'info' | 'warning' | 'error' | 'success' | 'debug'
 
-interface LogEntry {
-  id: string
-  timestamp: Date
-  level: LogLevel
-  source: 'emulator' | 'ttn' | 'webhook' | 'database' | 'system'
-  message: string
-  details?: string
-}
-
-const generateLogEntry = (): LogEntry => {
-  const messages = [
-    { level: 'info', source: 'emulator', message: 'Sending uplink message', details: 'DevEUI: 70B3D57ED0000001, Port: 1, Payload: 0x48656C6C6F' },
-    { level: 'success', source: 'ttn', message: 'Uplink accepted by TTN', details: 'Message ID: abc123, Gateway: US Gateway' },
-    { level: 'info', source: 'webhook', message: 'Webhook delivered successfully', details: 'Status: 200, Latency: 145ms' },
-    { level: 'success', source: 'database', message: 'Telemetry record inserted', details: 'Table: telemetry_readings, ID: 12345' },
-    { level: 'warning', source: 'emulator', message: 'Low battery detected on device', details: 'DevEUI: 70B3D57ED0000002, Battery: 15%' },
-    { level: 'error', source: 'ttn', message: 'Failed to send downlink', details: 'Error: Device not in receive window' },
-    { level: 'debug', source: 'system', message: 'Configuration loaded', details: 'TTN Host: nam1.cloud.thethings.network' },
-    { level: 'info', source: 'emulator', message: 'Temperature reading captured', details: 'Value: 38.5°F, Humidity: 62%' },
-    { level: 'warning', source: 'webhook', message: 'Webhook retry triggered', details: 'Attempt 2 of 3, Previous error: Timeout' },
-    { level: 'success', source: 'ttn', message: 'Join accept received', details: 'DevEUI: 70B3D57ED0000001, DevAddr: 26011234' },
-  ]
-
-  const msg = messages[Math.floor(Math.random() * messages.length)]
-
-  return {
-    id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-    timestamp: new Date(),
-    level: msg.level as LogLevel,
-    source: msg.source as LogEntry['source'],
-    message: msg.message,
-    details: msg.details,
-  }
-}
-
 export function LogsTab() {
-  const [isLogging, setIsLogging] = useState(false)
-  const [logs, setLogs] = useState<LogEntry[]>([])
+  const { toast } = useToast()
+  const { sendSingleReading, activeDeviceCount } = useEmulation({})
+
+  // Use global logs store - persists across tab switches
+  const {
+    logs,
+    isLogging,
+    startLogging,
+    stopLogging,
+    toggleLogging,
+    addLog,
+    addLogs,
+    clearLogs,
+  } = useLogs()
+
+  const [isSendingReading, setIsSendingReading] = useState(false)
   const [filter, setFilter] = useState('')
   const [levelFilters, setLevelFilters] = useState<LogLevel[]>(['info', 'warning', 'error', 'success', 'debug'])
   const [sourceFilter, setSourceFilter] = useState('all')
@@ -95,62 +80,73 @@ export function LogsTab() {
     }
   }, [logs, autoScroll])
 
-  // Simulated log generation
-  useEffect(() => {
-    if (!isLogging) return
-
-    const interval = setInterval(() => {
-      setLogs((prev) => [...prev, generateLogEntry()].slice(-500)) // Keep last 500 logs
-    }, 1000 + Math.random() * 2000)
-
-    return () => clearInterval(interval)
-  }, [isLogging])
-
   const handleEnableLogging = () => {
-    setIsLogging(true)
-    setLogs([
-      {
-        id: 'start',
-        timestamp: new Date(),
-        level: 'info',
-        source: 'system',
-        message: 'Logging enabled',
-        details: 'Live log feed started',
-      },
-    ])
+    startLogging()
   }
 
-  const handleRunSingleReading = () => {
-    const reading: LogEntry[] = [
-      {
-        id: Date.now().toString() + '-1',
-        timestamp: new Date(),
-        level: 'info',
-        source: 'emulator',
-        message: 'Manual reading triggered',
-      },
-      {
-        id: Date.now().toString() + '-2',
-        timestamp: new Date(),
-        level: 'info',
-        source: 'emulator',
-        message: 'Capturing sensor data...',
-        details: 'Temperature: 38.5°F, Humidity: 62%, Door: Closed',
-      },
-      {
-        id: Date.now().toString() + '-3',
-        timestamp: new Date(),
-        level: 'success',
+  const handleRunSingleReading = async () => {
+    if (activeDeviceCount === 0) {
+      toast({
+        title: 'No active devices',
+        description: 'Add and activate devices before sending readings.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setIsSendingReading(true)
+
+    // Add log entry for trigger
+    addLog({
+      level: 'info',
+      source: 'emulator',
+      message: 'Manual reading triggered',
+      details: `Sending to ${activeDeviceCount} active device(s)`,
+    })
+
+    try {
+      await sendSingleReading()
+
+      // Add success logs
+      addLogs([
+        {
+          level: 'info',
+          source: 'emulator',
+          message: 'Capturing sensor data...',
+          details: 'Temperature: 38.5°F, Humidity: 62%, Door: Closed',
+        },
+        {
+          level: 'success',
+          source: 'ttn',
+          message: 'Uplink sent successfully',
+          details: 'Reading transmitted via TTN simulation API',
+        },
+      ])
+
+      toast({
+        title: 'Reading sent',
+        description: 'Single reading transmitted successfully.',
+      })
+    } catch (err) {
+      addLog({
+        level: 'error',
         source: 'ttn',
-        message: 'Uplink sent successfully',
-        details: 'DevEUI: 70B3D57ED0000001, FCnt: 1247',
-      },
-    ]
-    setLogs((prev) => [...prev, ...reading])
+        message: 'Failed to send reading',
+        details: err instanceof Error ? err.message : 'Unknown error',
+      })
+
+      toast({
+        title: 'Failed to send reading',
+        description: 'Check TTN configuration and try again.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsSendingReading(false)
+    }
   }
 
   const handleClearLogs = () => {
-    setLogs([])
+    clearLogs()
   }
 
   const handleExportLogs = () => {
@@ -173,7 +169,7 @@ export function LogsTab() {
   }
 
   const filteredLogs = logs.filter((log) => {
-    if (!levelFilters.includes(log.level)) return false
+    if (!levelFilters.includes(log.level as LogLevel)) return false
     if (sourceFilter !== 'all' && log.source !== sourceFilter) return false
     if (filter && !log.message.toLowerCase().includes(filter.toLowerCase())) return false
     return true
@@ -211,6 +207,8 @@ export function LogsTab() {
     )
   }
 
+  // Show empty state only if logging is disabled AND no logs exist
+  // If logs exist from a previous session, show them even if logging is paused
   if (!isLogging && logs.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -241,7 +239,7 @@ export function LogsTab() {
               <Button
                 variant={isLogging ? 'outline' : 'default'}
                 size="sm"
-                onClick={() => setIsLogging(!isLogging)}
+                onClick={toggleLogging}
               >
                 {isLogging ? (
                   <>
@@ -255,9 +253,18 @@ export function LogsTab() {
                   </>
                 )}
               </Button>
-              <Button variant="outline" size="sm" onClick={handleRunSingleReading}>
-                <Zap className="w-4 h-4 mr-1" />
-                Run Single Reading
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRunSingleReading}
+                disabled={isSendingReading || activeDeviceCount === 0}
+              >
+                {isSendingReading ? (
+                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                ) : (
+                  <Zap className="w-4 h-4 mr-1" />
+                )}
+                {isSendingReading ? 'Sending...' : 'Run Single Reading'}
               </Button>
               <div className="h-6 w-px bg-border" />
               <StatusPill variant={isLogging ? 'success' : 'neutral'}>
@@ -372,7 +379,7 @@ export function LogsTab() {
                   onClick={() => setExpandedLog(expandedLog === log.id ? null : log.id)}
                 >
                   <div className="flex items-start gap-2">
-                    <LogIcon level={log.level} />
+                    <LogIcon level={log.level as LogLevel} />
                     <span className="text-muted-foreground text-xs w-20 flex-shrink-0">
                       {log.timestamp.toLocaleTimeString()}
                     </span>

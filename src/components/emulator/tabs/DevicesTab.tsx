@@ -1,5 +1,10 @@
 /**
  * DevicesTab - Device management and provisioning
+ * Connected to the actual API via useDevices hook
+ *
+ * TODO: Add device import/export (CSV, JSON)
+ * TODO: Add bulk device actions (delete, status change)
+ * TODO: Add device grouping/tagging feature
  */
 
 import { useState } from 'react'
@@ -13,9 +18,10 @@ import {
   ChevronDown,
   ChevronUp,
   RefreshCw,
-  Lock,
   Thermometer,
   DoorOpen,
+  Droplets,
+  Loader2,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -24,6 +30,8 @@ import { Label } from '@/components/ui/label'
 import { StatusPill } from '@/components/ui/status-pill'
 import { IdentifierDisplay } from '@/components/ui/copy-button'
 import { EmptyState } from '@/components/ui/empty-state'
+import { SetupWizard } from '@/components/ui/setup-wizard'
+import { QuickDeviceForm, ActivateDeviceForm, SetupErrorWizard } from '@/components/setup'
 import {
   Dialog,
   DialogContent,
@@ -51,52 +59,9 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-
-interface Device {
-  id: string
-  name: string
-  type: 'temperature' | 'door'
-  deviceClass: 'A' | 'B' | 'C'
-  devEUI: string
-  ttnDeviceId: string
-  joinEUI: string
-  appKey: string
-  ttnProvisioned: boolean
-  gatewayId: string | null
-  siteId: string | null
-  unitId: string | null
-}
-
-const mockDevices: Device[] = [
-  {
-    id: '1',
-    name: 'Freezer Temp Sensor 1',
-    type: 'temperature',
-    deviceClass: 'A',
-    devEUI: '70B3D57ED0000001',
-    ttnDeviceId: 'freezer-temp-sensor-1',
-    joinEUI: '0000000000000001',
-    appKey: '00112233445566778899AABBCCDDEEFF',
-    ttnProvisioned: true,
-    gatewayId: '1',
-    siteId: 'site-1',
-    unitId: 'unit-1',
-  },
-  {
-    id: '2',
-    name: 'Fridge Door Sensor',
-    type: 'door',
-    deviceClass: 'A',
-    devEUI: '70B3D57ED0000002',
-    ttnDeviceId: 'fridge-door-sensor',
-    joinEUI: '0000000000000001',
-    appKey: 'FFEEDDCCBBAA99887766554433221100',
-    ttnProvisioned: false,
-    gatewayId: null,
-    siteId: null,
-    unitId: null,
-  },
-]
+import { useDevices } from '@/hooks/useDevices'
+import type { Device, DeviceType, DeviceInsert } from '@/lib/types'
+import { useToast } from '@/hooks/use-toast'
 
 function generateEUI(): string {
   const hex = '0123456789ABCDEF'
@@ -107,67 +72,242 @@ function generateEUI(): string {
   return result
 }
 
-function generateAppKey(): string {
-  const hex = '0123456789ABCDEF'
-  let result = ''
-  for (let i = 0; i < 32; i++) {
-    result += hex[Math.floor(Math.random() * 16)]
-  }
-  return result
-}
-
 export function DevicesTab() {
-  const [devices, setDevices] = useState<Device[]>(mockDevices)
+  const { toast } = useToast()
+  const {
+    devices,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    createDevice,
+    deleteDevice,
+    updateDevice,
+    isCreating,
+    isDeleting,
+    isUpdating,
+  } = useDevices()
+
   const [expandedDevice, setExpandedDevice] = useState<string | null>(null)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [editingDevice, setEditingDevice] = useState<Device | null>(null)
   const [newDevice, setNewDevice] = useState({
     name: '',
-    type: 'temperature' as 'temperature' | 'door',
-    devEUI: generateEUI(),
-    appKey: generateAppKey(),
+    device_type: 'temperature' as DeviceType,
+    dev_eui: generateEUI(),
   })
 
   const handleAddDevice = () => {
-    const device: Device = {
-      id: Date.now().toString(),
+    const deviceData: DeviceInsert = {
       name: newDevice.name,
-      type: newDevice.type,
-      deviceClass: 'A',
-      devEUI: newDevice.devEUI,
-      ttnDeviceId: newDevice.name.toLowerCase().replace(/\s+/g, '-'),
-      joinEUI: '0000000000000001',
-      appKey: newDevice.appKey,
-      ttnProvisioned: false,
-      gatewayId: null,
-      siteId: null,
-      unitId: null,
+      device_type: newDevice.device_type,
+      dev_eui: newDevice.dev_eui,
+      organization_id: '', // Will be set by API from JWT
+      status: 'active',
+      simulation_params: JSON.stringify({
+        interval: 30,
+        min_value: newDevice.device_type === 'temperature' ? 35 : 0,
+        max_value: newDevice.device_type === 'temperature' ? 45 : 100,
+      }),
     }
-    setDevices([...devices, device])
-    setNewDevice({
-      name: '',
-      type: 'temperature',
-      devEUI: generateEUI(),
-      appKey: generateAppKey(),
+
+    createDevice(deviceData, {
+      onSuccess: () => {
+        toast({
+          title: 'Device created',
+          description: `${newDevice.name} has been added successfully.`,
+        })
+        setNewDevice({
+          name: '',
+          device_type: 'temperature',
+          dev_eui: generateEUI(),
+        })
+        setIsAddDialogOpen(false)
+      },
+      onError: (err: Error) => {
+        toast({
+          title: 'Failed to create device',
+          description: err.message,
+          variant: 'destructive',
+        })
+      },
     })
-    setIsAddDialogOpen(false)
   }
 
-  const handleDeleteDevice = (id: string) => {
-    setDevices(devices.filter((d) => d.id !== id))
+  const handleDeleteDevice = (id: string, name: string) => {
+    deleteDevice(id, {
+      onSuccess: () => {
+        toast({
+          title: 'Device deleted',
+          description: `${name} has been removed.`,
+        })
+      },
+      onError: (err: Error) => {
+        toast({
+          title: 'Failed to delete device',
+          description: err.message,
+          variant: 'destructive',
+        })
+      },
+    })
   }
 
-  const handleProvisionToTTN = (id: string) => {
-    setDevices(
-      devices.map((d) => (d.id === id ? { ...d, ttnProvisioned: true } : d))
+  const handleEditDevice = (device: Device) => {
+    setEditingDevice(device)
+    setIsEditDialogOpen(true)
+  }
+
+  const handleSaveEdit = () => {
+    if (!editingDevice) return
+
+    updateDevice(
+      {
+        id: editingDevice.id,
+        updates: {
+          name: editingDevice.name,
+          device_type: editingDevice.device_type,
+          status: editingDevice.status,
+        },
+      },
+      {
+        onSuccess: () => {
+          toast({
+            title: 'Device updated',
+            description: `${editingDevice.name} has been updated.`,
+          })
+          setIsEditDialogOpen(false)
+          setEditingDevice(null)
+        },
+        onError: (err: Error) => {
+          toast({
+            title: 'Failed to update device',
+            description: err.message,
+            variant: 'destructive',
+          })
+        },
+      }
     )
   }
 
-  const DeviceIcon = ({ type }: { type: 'temperature' | 'door' }) =>
-    type === 'temperature' ? (
-      <Thermometer className="w-4 h-4" />
-    ) : (
-      <DoorOpen className="w-4 h-4" />
+  const handleProvisionToTTN = (device: Device) => {
+    // Mark device as provisioned by updating its status
+    updateDevice(
+      {
+        id: device.id,
+        updates: {
+          status: 'active',
+          // In a real implementation, you would call TTN API here
+        },
+      },
+      {
+        onSuccess: () => {
+          toast({
+            title: 'Device provisioned',
+            description: `${device.name} is now ready for TTN.`,
+          })
+        },
+        onError: (err: Error) => {
+          toast({
+            title: 'Failed to provision device',
+            description: err.message,
+            variant: 'destructive',
+          })
+        },
+      }
     )
+  }
+
+  const handleProvisionAll = () => {
+    const unprovisionedDevices = devices.filter((d) => d.status !== 'active')
+    unprovisionedDevices.forEach((device) => {
+      handleProvisionToTTN(device)
+    })
+  }
+
+  const DeviceIcon = ({ type }: { type: DeviceType }) => {
+    switch (type) {
+      case 'temperature':
+        return <Thermometer className="w-4 h-4" />
+      case 'humidity':
+        return <Droplets className="w-4 h-4" />
+      case 'door':
+        return <DoorOpen className="w-4 h-4" />
+      default:
+        return <Cpu className="w-4 h-4" />
+    }
+  }
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
+          <p className="text-sm text-muted-foreground">Loading devices...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Error state - show troubleshooting wizard
+  if (isError) {
+    return (
+      <SetupErrorWizard
+        error={error}
+        onRetry={() => refetch()}
+        tabName="Devices"
+      >
+        <div className="space-y-3">
+          <p className="text-sm font-medium">Or create a device once connected:</p>
+          <QuickDeviceForm onSuccess={() => refetch()} />
+        </div>
+      </SetupErrorWizard>
+    )
+  }
+
+  // No devices - show setup wizard to create first device
+  if (devices.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <SetupWizard
+          title="Get Started with Devices"
+          description="Create and provision a LoRaWAN device to start sending telemetry"
+          steps={[
+            {
+              id: 'create-device',
+              title: 'Create a Device',
+              description: 'Add your first device to the network',
+              content: <QuickDeviceForm onSuccess={() => refetch()} />,
+            },
+          ]}
+          onComplete={() => refetch()}
+        />
+      </div>
+    )
+  }
+
+  // Devices exist but none are provisioned (active)
+  const activeDevices = devices.filter(d => d.status === 'active')
+  if (activeDevices.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <SetupWizard
+          title="Provision Your Devices"
+          description="Your devices need to be provisioned to TTN before they can send data"
+          steps={[
+            {
+              id: 'activate-device',
+              title: 'Provision Devices',
+              description: 'Enable at least one device to connect to TTN',
+              content: <ActivateDeviceForm onSuccess={() => refetch()} />,
+            },
+          ]}
+          onComplete={() => refetch()}
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -180,9 +320,14 @@ export function DevicesTab() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => refetch()}>
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh
+          </Button>
           <Button
             variant="outline"
-            disabled={devices.every((d) => d.ttnProvisioned)}
+            onClick={handleProvisionAll}
+            disabled={devices.every((d) => d.status === 'active') || isUpdating}
           >
             <Cloud className="w-4 h-4 mr-2" />
             Provision All to TTN
@@ -216,9 +361,9 @@ export function DevicesTab() {
                 <div className="space-y-2">
                   <Label htmlFor="device-type">Device Type</Label>
                   <Select
-                    value={newDevice.type}
-                    onValueChange={(value: 'temperature' | 'door') =>
-                      setNewDevice({ ...newDevice, type: value })
+                    value={newDevice.device_type}
+                    onValueChange={(value: DeviceType) =>
+                      setNewDevice({ ...newDevice, device_type: value })
                     }
                   >
                     <SelectTrigger>
@@ -228,6 +373,7 @@ export function DevicesTab() {
                       <SelectItem value="temperature">
                         Temperature Sensor
                       </SelectItem>
+                      <SelectItem value="humidity">Humidity Sensor</SelectItem>
                       <SelectItem value="door">Door Sensor</SelectItem>
                     </SelectContent>
                   </Select>
@@ -239,7 +385,7 @@ export function DevicesTab() {
                       variant="ghost"
                       size="sm"
                       onClick={() =>
-                        setNewDevice({ ...newDevice, devEUI: generateEUI() })
+                        setNewDevice({ ...newDevice, dev_eui: generateEUI() })
                       }
                     >
                       <RefreshCw className="w-3 h-3 mr-1" />
@@ -248,34 +394,11 @@ export function DevicesTab() {
                   </div>
                   <Input
                     id="dev-eui"
-                    value={newDevice.devEUI}
+                    value={newDevice.dev_eui}
                     onChange={(e) =>
-                      setNewDevice({ ...newDevice, devEUI: e.target.value })
+                      setNewDevice({ ...newDevice, dev_eui: e.target.value })
                     }
                     className="font-mono"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="app-key">AppKey</Label>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        setNewDevice({ ...newDevice, appKey: generateAppKey() })
-                      }
-                    >
-                      <RefreshCw className="w-3 h-3 mr-1" />
-                      Generate
-                    </Button>
-                  </div>
-                  <Input
-                    id="app-key"
-                    value={newDevice.appKey}
-                    onChange={(e) =>
-                      setNewDevice({ ...newDevice, appKey: e.target.value })
-                    }
-                    className="font-mono text-xs"
                   />
                 </div>
               </div>
@@ -286,7 +409,11 @@ export function DevicesTab() {
                 >
                   Cancel
                 </Button>
-                <Button onClick={handleAddDevice} disabled={!newDevice.name}>
+                <Button
+                  onClick={handleAddDevice}
+                  disabled={!newDevice.name || isCreating}
+                >
+                  {isCreating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                   Add Device
                 </Button>
               </DialogFooter>
@@ -295,18 +422,79 @@ export function DevicesTab() {
         </div>
       </div>
 
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Device</DialogTitle>
+            <DialogDescription>
+              Update device configuration
+            </DialogDescription>
+          </DialogHeader>
+          {editingDevice && (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-name">Device Name</Label>
+                <Input
+                  id="edit-name"
+                  value={editingDevice.name}
+                  onChange={(e) =>
+                    setEditingDevice({ ...editingDevice, name: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-type">Device Type</Label>
+                <Select
+                  value={editingDevice.device_type}
+                  onValueChange={(value: DeviceType) =>
+                    setEditingDevice({ ...editingDevice, device_type: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="temperature">Temperature Sensor</SelectItem>
+                    <SelectItem value="humidity">Humidity Sensor</SelectItem>
+                    <SelectItem value="door">Door Sensor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-status">Status</Label>
+                <Select
+                  value={editingDevice.status}
+                  onValueChange={(value: 'active' | 'inactive' | 'error') =>
+                    setEditingDevice({ ...editingDevice, status: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="error">Error</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEdit} disabled={isUpdating}>
+              {isUpdating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Device List */}
-      {devices.length === 0 ? (
-        <EmptyState
-          icon={Cpu}
-          title="No devices configured"
-          description="Add a LoRaWAN end device to start sending telemetry"
-          action={{
-            label: 'Add Device',
-            onClick: () => setIsAddDialogOpen(true),
-          }}
-        />
-      ) : (
+      {devices.length > 0 && (
         <div className="space-y-4">
           {devices.map((device) => (
             <Collapsible
@@ -322,45 +510,58 @@ export function DevicesTab() {
                     <div className="flex items-center justify-between">
                       <CardTitle className="flex items-center gap-3 text-base">
                         <div className="w-8 h-8 rounded-lg bg-muted/50 flex items-center justify-center">
-                          <DeviceIcon type={device.type} />
+                          <DeviceIcon type={device.device_type} />
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
                             {device.name}
                             <StatusPill
                               variant={
-                                device.type === 'temperature' ? 'info' : 'warning'
+                                device.device_type === 'temperature'
+                                  ? 'info'
+                                  : device.device_type === 'humidity'
+                                  ? 'info'
+                                  : 'warning'
                               }
                               size="sm"
                               dot={false}
                             >
-                              {device.type === 'temperature'
-                                ? 'Temperature'
-                                : 'Door'}
+                              {device.device_type.charAt(0).toUpperCase() +
+                                device.device_type.slice(1)}
                             </StatusPill>
-                            <StatusPill variant="neutral" size="sm" dot={false}>
-                              Class {device.deviceClass}
+                            <StatusPill
+                              variant={
+                                device.status === 'active'
+                                  ? 'success'
+                                  : device.status === 'error'
+                                  ? 'error'
+                                  : 'neutral'
+                              }
+                              size="sm"
+                            >
+                              {device.status}
                             </StatusPill>
                           </div>
                           <p className="text-xs text-muted-foreground font-mono mt-0.5">
-                            {device.devEUI}
+                            {device.dev_eui}
                           </p>
                         </div>
                       </CardTitle>
                       <div className="flex items-center gap-2">
                         <StatusPill
-                          variant={device.ttnProvisioned ? 'success' : 'neutral'}
+                          variant={device.status === 'active' ? 'success' : 'neutral'}
                         >
-                          {device.ttnProvisioned ? 'TTN Ready' : 'Not Provisioned'}
+                          {device.status === 'active' ? 'TTN Ready' : 'Not Provisioned'}
                         </StatusPill>
-                        {!device.ttnProvisioned && (
+                        {device.status !== 'active' && (
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation()
-                              handleProvisionToTTN(device.id)
+                              handleProvisionToTTN(device)
                             }}
+                            disabled={isUpdating}
                           >
                             <Cloud className="w-3.5 h-3.5 mr-1" />
                             Provision
@@ -378,13 +579,14 @@ export function DevicesTab() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleEditDevice(device)}>
                               <Pencil className="w-4 h-4 mr-2" />
                               Edit
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                              onClick={() => handleDeleteDevice(device.id)}
+                              onClick={() => handleDeleteDevice(device.id, device.name)}
                               className="text-destructive"
+                              disabled={isDeleting}
                             >
                               <Trash2 className="w-4 h-4 mr-2" />
                               Delete
@@ -411,79 +613,76 @@ export function DevicesTab() {
                         <div className="space-y-3">
                           <IdentifierDisplay
                             label="DevEUI"
-                            value={device.devEUI}
+                            value={device.dev_eui}
                           />
-                          <IdentifierDisplay
-                            label="TTN ID"
-                            value={device.ttnDeviceId}
-                          />
+                          {device.app_eui && (
+                            <IdentifierDisplay
+                              label="AppEUI"
+                              value={device.app_eui}
+                            />
+                          )}
+                          {device.application_id && (
+                            <IdentifierDisplay
+                              label="Application"
+                              value={device.application_id}
+                            />
+                          )}
                         </div>
 
                         <h4 className="text-sm font-medium text-foreground pt-4">
-                          OTAA Credentials
+                          Configuration
                         </h4>
                         <div className="space-y-3">
-                          <IdentifierDisplay
-                            label="JoinEUI"
-                            value={device.joinEUI}
-                          />
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground uppercase tracking-wide">
-                              AppKey:
+                              Type:
                             </span>
-                            <code className="font-mono text-xs text-foreground bg-muted/50 px-2 py-0.5 rounded flex items-center gap-1">
-                              <Lock className="w-3 h-3 text-muted-foreground" />
-                              ••••••••••••••••
-                            </code>
-                            <Button variant="ghost" size="sm">
-                              <RefreshCw className="w-3 h-3 mr-1" />
-                              Regenerate
-                            </Button>
+                            <span className="text-sm font-medium">
+                              {device.device_type.charAt(0).toUpperCase() +
+                                device.device_type.slice(1)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground uppercase tracking-wide">
+                              Status:
+                            </span>
+                            <StatusPill
+                              variant={
+                                device.status === 'active'
+                                  ? 'success'
+                                  : device.status === 'error'
+                                  ? 'error'
+                                  : 'neutral'
+                              }
+                              size="sm"
+                            >
+                              {device.status}
+                            </StatusPill>
                           </div>
                         </div>
                       </div>
 
-                      {/* Right Column - Location */}
+                      {/* Right Column - Timestamps */}
                       <div className="space-y-4">
                         <h4 className="text-sm font-medium text-foreground">
-                          Location Assignment
+                          Timestamps
                         </h4>
                         <div className="space-y-3">
-                          <div className="space-y-2">
-                            <Label className="text-xs">Gateway</Label>
-                            <Select defaultValue={device.gatewayId || ''}>
-                              <SelectTrigger className="h-8">
-                                <SelectValue placeholder="Select gateway" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="1">US Gateway</SelectItem>
-                                <SelectItem value="2">EU Gateway</SelectItem>
-                              </SelectContent>
-                            </Select>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground uppercase tracking-wide">
+                              Created:
+                            </span>
+                            <span className="text-sm text-foreground">
+                              {new Date(device.created_at * 1000).toLocaleString()}
+                            </span>
                           </div>
-                          <div className="space-y-2">
-                            <Label className="text-xs">Site</Label>
-                            <Select defaultValue={device.siteId || ''}>
-                              <SelectTrigger className="h-8">
-                                <SelectValue placeholder="Select site" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="site-1">Main Store</SelectItem>
-                                <SelectItem value="site-2">Warehouse</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-2">
-                            <Label className="text-xs">Unit</Label>
-                            <Select defaultValue={device.unitId || ''}>
-                              <SelectTrigger className="h-8">
-                                <SelectValue placeholder="Select unit" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="unit-1">Freezer A</SelectItem>
-                                <SelectItem value="unit-2">Fridge B</SelectItem>
-                              </SelectContent>
-                            </Select>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground uppercase tracking-wide">
+                              Updated:
+                            </span>
+                            <span className="text-sm text-foreground">
+                              {new Date(device.updated_at * 1000).toLocaleString()}
+                            </span>
                           </div>
                         </div>
                       </div>
