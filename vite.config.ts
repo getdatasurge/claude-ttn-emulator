@@ -19,6 +19,7 @@ export default defineConfig(({ mode }) => {
       // PWA Configuration
       VitePWA({
         registerType: 'autoUpdate',
+        includeAssets: ['vite.svg'],
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
           runtimeCaching: [
@@ -43,19 +44,19 @@ export default defineConfig(({ mode }) => {
           background_color: '#ffffff',
           display: 'standalone',
           orientation: 'portrait',
-          scope: '/',
-          start_url: '/',
+          scope: '/claude-ttn-emulator/',
+          start_url: '/claude-ttn-emulator/',
           icons: [
             {
-              src: '/icons/icon-192.png',
+              src: '/claude-ttn-emulator/vite.svg',
               sizes: '192x192',
-              type: 'image/png',
+              type: 'image/svg+xml',
               purpose: 'any maskable',
             },
             {
-              src: '/icons/icon-512.png',
+              src: '/claude-ttn-emulator/vite.svg',
               sizes: '512x512',
-              type: 'image/png',
+              type: 'image/svg+xml',
               purpose: 'any maskable',
             },
           ],
@@ -128,19 +129,16 @@ export default defineConfig(({ mode }) => {
             if (id.includes('node_modules/@tanstack')) {
               return 'vendor-query'
             }
-            // Radix UI components
-            if (id.includes('node_modules/@radix-ui')) {
+            // Combine Radix UI with forms to prevent initialization issues
+            if (id.includes('node_modules/@radix-ui') ||
+                id.includes('node_modules/react-hook-form') ||
+                id.includes('node_modules/zod') ||
+                id.includes('node_modules/@hookform')) {
               return 'vendor-ui'
             }
             // Lucide icons - can be large
             if (id.includes('node_modules/lucide-react')) {
               return 'vendor-icons'
-            }
-            // Forms and validation
-            if (id.includes('node_modules/react-hook-form') ||
-                id.includes('node_modules/zod') ||
-                id.includes('node_modules/@hookform')) {
-              return 'vendor-forms'
             }
             // Stack Auth (optional module)
             if (id.includes('node_modules/@stackframe')) {
@@ -166,6 +164,12 @@ export default defineConfig(({ mode }) => {
         compress: {
           drop_console: mode === 'production',
           drop_debugger: mode === 'production',
+          // Prevent variable reuse that can cause TDZ errors
+          keep_fnames: true,
+        },
+        mangle: {
+          // Preserve function names to prevent initialization issues
+          keep_fnames: true,
         },
       },
       chunkSizeWarningLimit: 500, // Lower the warning threshold
