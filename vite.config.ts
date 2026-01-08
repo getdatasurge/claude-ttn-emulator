@@ -9,6 +9,7 @@ export default defineConfig(({ mode }) => {
   const isAnalyze = process.env.ANALYZE === 'true'
 
   return {
+    base: '/claude-ttn-emulator/',
     plugins: [
       react({
         // Enable React DevTools in development

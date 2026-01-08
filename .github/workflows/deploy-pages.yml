@@ -1,0 +1,59 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_STACK_PROJECT_ID: ${{ secrets.VITE_STACK_PROJECT_ID || 'placeholder' }}
+          VITE_STACK_PUBLISHABLE_CLIENT_KEY: ${{ secrets.VITE_STACK_PUBLISHABLE_CLIENT_KEY || 'placeholder' }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL || 'https://api.example.com' }}
+          VITE_TURSO_DATABASE_URL: ${{ secrets.VITE_TURSO_DATABASE_URL || 'file:local.db' }}
+          VITE_TURSO_AUTH_TOKEN: ${{ secrets.VITE_TURSO_AUTH_TOKEN || '' }}
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
