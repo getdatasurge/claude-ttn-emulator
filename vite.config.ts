@@ -1,6 +1,5 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react-swc'
-import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
 
 // https://vitejs.dev/config/
@@ -14,53 +13,6 @@ export default defineConfig(({ mode }) => {
       react({
         // Enable React DevTools in development
         devTarget: 'es2022',
-      }),
-      
-      // PWA Configuration
-      VitePWA({
-        registerType: 'autoUpdate',
-        includeAssets: ['vite.svg'],
-        workbox: {
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
-          runtimeCaching: [
-            {
-              urlPattern: /^https:\/\/api\./,
-              handler: 'NetworkFirst',
-              options: {
-                cacheName: 'api-cache',
-                expiration: {
-                  maxEntries: 100,
-                  maxAgeSeconds: 60 * 60 * 24, // 24 hours
-                },
-              },
-            },
-          ],
-        },
-        manifest: {
-          name: 'FrostGuard LoRaWAN Emulator',
-          short_name: 'FrostGuard Emulator',
-          description: 'LoRaWAN Device Emulator for Testing TTN Integration',
-          theme_color: '#000000',
-          background_color: '#ffffff',
-          display: 'standalone',
-          orientation: 'portrait',
-          scope: '/claude-ttn-emulator/',
-          start_url: '/claude-ttn-emulator/',
-          icons: [
-            {
-              src: '/claude-ttn-emulator/vite.svg',
-              sizes: '192x192',
-              type: 'image/svg+xml',
-              purpose: 'any maskable',
-            },
-            {
-              src: '/claude-ttn-emulator/vite.svg',
-              sizes: '512x512',
-              type: 'image/svg+xml',
-              purpose: 'any maskable',
-            },
-          ],
-        },
       }),
 
       // Bundle analyzer (only when ANALYZE=true)
@@ -101,78 +53,43 @@ export default defineConfig(({ mode }) => {
     },
 
     build: {
-      target: 'es2022',
-      minify: 'terser',
+      target: 'es2020', // Use more compatible target
+      minify: 'esbuild', // Switch to esbuild minification to avoid Terser issues
       sourcemap: mode === 'development',
       rollupOptions: {
         output: {
-          manualChunks: (id) => {
-            // Keep React and ReactDOM together - critical for hooks
-            if (id.includes('node_modules/react') ||
-                id.includes('node_modules/react-dom') ||
-                id.includes('node_modules/scheduler')) {
-              return 'vendor-react'
-            }
-            // Recharts is large, split it out (only used in emulator)
-            if (id.includes('node_modules/recharts') ||
-                id.includes('node_modules/d3-')) {
-              return 'vendor-charts'
-            }
-            // Redux and state management
-            if (id.includes('node_modules/@reduxjs') ||
-                id.includes('node_modules/redux') ||
-                id.includes('node_modules/react-redux') ||
-                id.includes('node_modules/immer')) {
-              return 'vendor-state'
-            }
-            // React Query
-            if (id.includes('node_modules/@tanstack')) {
-              return 'vendor-query'
-            }
-            // Combine Radix UI with forms to prevent initialization issues
-            if (id.includes('node_modules/@radix-ui') ||
-                id.includes('node_modules/react-hook-form') ||
-                id.includes('node_modules/zod') ||
-                id.includes('node_modules/@hookform')) {
-              return 'vendor-ui'
-            }
-            // Lucide icons - can be large
-            if (id.includes('node_modules/lucide-react')) {
-              return 'vendor-icons'
-            }
-            // Stack Auth (optional module)
-            if (id.includes('node_modules/@stackframe')) {
-              return 'vendor-auth'
-            }
-            // JWT/crypto
-            if (id.includes('node_modules/jose')) {
-              return 'vendor-crypto'
-            }
-            // React router
-            if (id.includes('node_modules/react-router') ||
-                id.includes('node_modules/@remix-run')) {
-              return 'vendor-router'
-            }
-            // Other vendor modules
-            if (id.includes('node_modules/')) {
-              return 'vendor-misc'
-            }
+          // Simplify chunking strategy to avoid initialization issues
+          manualChunks: {
+            'vendor': [
+              'react',
+              'react-dom',
+              'react-router-dom',
+            ],
+            'vendor-ui': [
+              '@radix-ui/react-dialog',
+              '@radix-ui/react-dropdown-menu',
+              '@radix-ui/react-label',
+              '@radix-ui/react-popover',
+              '@radix-ui/react-select',
+              '@radix-ui/react-separator',
+              '@radix-ui/react-slot',
+              '@radix-ui/react-switch',
+              '@radix-ui/react-tabs',
+              '@radix-ui/react-toast',
+              '@radix-ui/react-tooltip',
+              '@radix-ui/react-alert-dialog',
+              '@radix-ui/react-checkbox',
+              '@radix-ui/react-collapsible',
+              '@radix-ui/react-progress',
+              '@radix-ui/react-slider',
+              'react-hook-form',
+              '@hookform/resolvers',
+              'zod',
+            ],
           },
         },
       },
-      terserOptions: {
-        compress: {
-          drop_console: mode === 'production',
-          drop_debugger: mode === 'production',
-          // Prevent variable reuse that can cause TDZ errors
-          keep_fnames: true,
-        },
-        mangle: {
-          // Preserve function names to prevent initialization issues
-          keep_fnames: true,
-        },
-      },
-      chunkSizeWarningLimit: 500, // Lower the warning threshold
+      chunkSizeWarningLimit: 600, // Increase limit slightly
     },
 
     optimizeDeps: {
