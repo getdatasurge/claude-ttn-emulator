@@ -58,34 +58,41 @@ export default defineConfig(({ mode }) => {
       sourcemap: true, // Enable sourcemaps for debugging production issues
       rollupOptions: {
         output: {
-          // Simplify chunking strategy to avoid initialization issues
-          manualChunks: {
-            'vendor': [
-              'react',
-              'react-dom',
-              'react-router-dom',
-            ],
-            'vendor-ui': [
-              '@radix-ui/react-dialog',
-              '@radix-ui/react-dropdown-menu',
-              '@radix-ui/react-label',
-              '@radix-ui/react-popover',
-              '@radix-ui/react-select',
-              '@radix-ui/react-separator',
-              '@radix-ui/react-slot',
-              '@radix-ui/react-switch',
-              '@radix-ui/react-tabs',
-              '@radix-ui/react-toast',
-              '@radix-ui/react-tooltip',
-              '@radix-ui/react-alert-dialog',
-              '@radix-ui/react-checkbox',
-              '@radix-ui/react-collapsible',
-              '@radix-ui/react-progress',
-              '@radix-ui/react-slider',
-              'react-hook-form',
-              '@hookform/resolvers',
-              'zod',
-            ],
+          // Use function-based chunking to properly handle dependencies
+          manualChunks: (id) => {
+            // Core React must be in its own chunk
+            if (id.includes('node_modules/react/') || 
+                id.includes('node_modules/react-dom/') ||
+                id.includes('node_modules/scheduler/')) {
+              return 'vendor-react';
+            }
+            
+            // Router
+            if (id.includes('node_modules/react-router') || 
+                id.includes('node_modules/@remix-run/')) {
+              return 'vendor-router';
+            }
+            
+            // All Radix UI and its dependencies in one chunk
+            // This ensures proper initialization order
+            if (id.includes('node_modules/@radix-ui/') ||
+                id.includes('node_modules/@floating-ui/') ||
+                id.includes('node_modules/aria-hidden/') ||
+                id.includes('node_modules/react-remove-scroll/')) {
+              return 'vendor-ui';
+            }
+            
+            // Forms and validation
+            if (id.includes('node_modules/react-hook-form/') ||
+                id.includes('node_modules/@hookform/') ||
+                id.includes('node_modules/zod/')) {
+              return 'vendor-forms';
+            }
+            
+            // Other vendor modules
+            if (id.includes('node_modules/')) {
+              return 'vendor';
+            }
           },
         },
       },
