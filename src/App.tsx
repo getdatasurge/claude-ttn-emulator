@@ -92,7 +92,7 @@ function AppRoutes() {
 
 function AppContent() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/claude-ttn-emulator">
       <AppInitializer>
         <AppRoutes />
         <GlobalToaster />
