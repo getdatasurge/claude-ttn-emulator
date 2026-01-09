@@ -349,12 +349,54 @@ Stack Auth is used for authentication with webhook-based user mirroring from Fro
 1. Create account at [stack-auth.com](https://stack-auth.com)
 2. Create a new project
 3. Enable password authentication
-4. Configure allowed redirect URLs (e.g., `http://localhost:4146/`)
+4. Configure allowed redirect URLs:
+   - Local: `http://localhost:4145/`
+   - GitHub Pages: `https://<username>.github.io/claude-ttn-emulator/`
 5. Copy Project ID and Publishable Client Key to `.env`
 6. Set up webhook endpoints in FrostGuard to sync users/organizations
 
 **Detailed Documentation:**
 See `STACK_AUTH_IMPLEMENTATION.md` for complete setup instructions, webhook integration, and testing guide.
+
+## GitHub Pages Deployment
+
+The app is automatically deployed to GitHub Pages on push to `main` or `master`.
+
+### Enabling Authentication on GitHub Pages
+
+By default, GitHub Pages runs in **demo mode** (no authentication). To enable Stack Auth:
+
+1. **Go to your GitHub repository settings:**
+   - Navigate to `Settings` → `Secrets and variables` → `Actions`
+
+2. **Add the following Repository Secrets:**
+
+   | Secret Name | Description |
+   |-------------|-------------|
+   | `VITE_STACK_PROJECT_ID` | Your Stack Auth project UUID (from Stack Auth dashboard) |
+   | `VITE_STACK_PUBLISHABLE_CLIENT_KEY` | Your Stack Auth publishable client key |
+
+3. **Configure Stack Auth redirect URLs:**
+   - In your Stack Auth project dashboard, add the GitHub Pages URL to trusted domains:
+   - `https://<username>.github.io/claude-ttn-emulator/`
+
+4. **Trigger a new deployment:**
+   - Push a commit to `main`/`master`, or
+   - Go to `Actions` → `Deploy to GitHub Pages` → `Run workflow`
+
+5. **Verify deployment:**
+   - Visit `https://<username>.github.io/claude-ttn-emulator/`
+   - The login form should appear (not "Demo Mode" message)
+
+### Optional: API Configuration for GitHub Pages
+
+For full functionality with backend API, also add these secrets:
+
+| Secret Name | Description |
+|-------------|-------------|
+| `VITE_API_BASE_URL` | Your Cloudflare Workers API URL |
+| `VITE_TURSO_DATABASE_URL` | Turso database URL (libsql://...) |
+| `VITE_TURSO_AUTH_TOKEN` | Turso authentication token |
 
 ## Documentation
 
