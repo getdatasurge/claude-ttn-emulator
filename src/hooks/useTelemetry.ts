@@ -41,6 +41,8 @@ export function useTelemetry(
     staleTime: 10000, // Consider data fresh for 10 seconds
     refetchInterval, // Auto-refresh if set
     refetchOnWindowFocus: true,
+    // Disable retries - show errors immediately for better UX
+    retry: false,
   })
 
   return {

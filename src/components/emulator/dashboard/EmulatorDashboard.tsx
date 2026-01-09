@@ -8,8 +8,7 @@ import { MonitorSection } from './MonitorSection'
 import { EmulatorStateSection } from './EmulatorStateSection'
 import { DashboardHeader } from './DashboardHeader'
 import { useDevices } from '@/hooks/useDevices'
-
-export type DeviceFilter = 'all' | 'active' | 'inactive' | 'error'
+import type { DeviceFilter } from './types'
 
 export function EmulatorDashboard() {
   const [filter, setFilter] = useState<DeviceFilter>('all')

@@ -42,6 +42,8 @@ export function useGateways() {
       const response = await apiClient.get<Gateway[]>('/api/gateways')
       return response
     },
+    // Disable retries - show errors immediately for better UX
+    retry: false,
   })
 }
 

@@ -55,7 +55,7 @@ export default defineConfig(({ mode }) => {
     build: {
       target: 'es2020', // Use more compatible target
       minify: 'esbuild', // Switch to esbuild minification to avoid Terser issues
-      sourcemap: mode === 'development',
+      sourcemap: true, // Enable sourcemaps for debugging production issues
       rollupOptions: {
         output: {
           // Simplify chunking strategy to avoid initialization issues

@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { isStackAuthConfigured } from '@/lib/stackAuth'
-import type { DeviceFilter } from './EmulatorDashboard'
+import type { DeviceFilter } from './types'
 
 // Lazy load UserProfile only when Stack Auth is configured
 const UserProfile = isStackAuthConfigured

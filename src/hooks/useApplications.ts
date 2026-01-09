@@ -35,6 +35,8 @@ export function useApplications() {
       const response = await apiClient.get<Application[]>('/api/applications')
       return response
     },
+    // Disable retries - show errors immediately for better UX
+    retry: false,
   })
 }
 
