@@ -58,42 +58,12 @@ export default defineConfig(({ mode }) => {
       sourcemap: true, // Enable sourcemaps for debugging production issues
       rollupOptions: {
         output: {
-          // Use function-based chunking to properly handle dependencies
-          manualChunks: (id) => {
-            // Core React must be in its own chunk
-            if (id.includes('node_modules/react/') || 
-                id.includes('node_modules/react-dom/') ||
-                id.includes('node_modules/scheduler/')) {
-              return 'vendor-react';
-            }
-            
-            // Router
-            if (id.includes('node_modules/react-router') || 
-                id.includes('node_modules/@remix-run/')) {
-              return 'vendor-router';
-            }
-            
-            // All Radix UI and its dependencies in one chunk
-            // This ensures proper initialization order
-            if (id.includes('node_modules/@radix-ui/') ||
-                id.includes('node_modules/@floating-ui/') ||
-                id.includes('node_modules/aria-hidden/') ||
-                id.includes('node_modules/react-remove-scroll/')) {
-              return 'vendor-ui';
-            }
-            
-            // Forms and validation
-            if (id.includes('node_modules/react-hook-form/') ||
-                id.includes('node_modules/@hookform/') ||
-                id.includes('node_modules/zod/')) {
-              return 'vendor-forms';
-            }
-            
-            // Other vendor modules
-            if (id.includes('node_modules/')) {
-              return 'vendor';
-            }
-          },
+          // DISABLED: Manual chunking was causing TDZ errors due to circular chunk dependencies
+          // Error: "Cannot access 't' before initialization" in vendor-ui chunk
+          // Root cause: Rollup's CommonJS interop helpers ended up in wrong chunks
+          // Let Vite's default chunking handle initialization order correctly
+          //
+          // Note: This may result in larger chunks but ensures correct module loading
         },
       },
       chunkSizeWarningLimit: 600, // Increase limit slightly
